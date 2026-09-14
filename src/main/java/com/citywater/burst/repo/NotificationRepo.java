@@ -1,0 +1,11 @@
+package com.citywater.burst.repo;
+
+import com.citywater.burst.model.Notification;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface NotificationRepo extends JpaRepository<Notification, Long> {
+    List<Notification> findByEventIdOrderByCreatedAtDesc(Long eventId);
+    List<Notification> findTop20ByOrderByCreatedAtDesc();
+}

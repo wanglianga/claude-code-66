@@ -1,0 +1,13 @@
+target/
+*.class
+*.jar
+!.mvn/wrapper/*.jar
+.git/
+.gitignore
+.idea/
+*.iml
+.vscode/
+node_modules/
+*.log
+.env
+docker-compose.override.yml
