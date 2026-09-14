@@ -4,6 +4,7 @@ import com.citywater.burst.dto.Requests.*;
 import com.citywater.burst.model.*;
 import com.citywater.burst.repo.*;
 import com.citywater.burst.service.BurstService;
+import com.citywater.burst.service.HospitalSupportService;
 import com.citywater.burst.service.IssueService;
 import com.citywater.burst.service.RepairService;
 import com.citywater.burst.service.SupportService;
@@ -41,6 +42,7 @@ public class DataSeeder implements ApplicationRunner {
     private final RepairService repairService;
     private final IssueService issueService;
     private final SupportService supportService;
+    private final HospitalSupportService hospitalSupportService;
 
     @Value("${app.seed-demo-data:true}")
     private boolean seedDemoData;
@@ -136,6 +138,15 @@ public class DataSeeder implements ApplicationRunner {
         supportService.addElderly(new ElderlyReq(e1.getId(), "张奶奶", "阳光高层3栋2单元1801", "13811110001", "志愿者-小王", "行动不便，需送水上楼"));
         supportService.addLoss(new MerchantLossReq(e1.getId(), "中山路洗车行", "洗车", new BigDecimal("3000"), "停水无法营业一天"));
         supportService.addTank(new TankReq(e1.getId(), "阳光高层小区", "3栋水箱", 15, TankStatus.LOW, "停水期间水箱即将抽空"));
+
+        // 医院应急供水保障（E1 影响人民医院，派单时自动建单）：已调度供水车，
+        // 供水车无法进院改设水点+志愿者送水，目前已供水到位待医院确认
+        HospitalSupport hs1 = hospitalSupportService.list(e1.getId()).stream().findFirst().orElseThrow();
+        hospitalSupportService.dispatchSupply(hs1.getId(), new HospitalDispatchReq(
+                "供水车2辆（浙A·D1234、浙A·D5678）", "5m³临时水箱×2（住院楼前）"));
+        hospitalSupportService.recordAccessIssue(hs1.getId(), new AccessIssueReq(
+                "医院东门对面人行道临时水点", "志愿者3人轮班送水至住院楼、透析中心"));
+        hospitalSupportService.markSupplied(hs1.getId(), new HospitalSupplyReq(12.5, null));
 
         // ---- 事件二：滨河路居民报修，待评估 ----
         burstService.create(new EventCreateReq(

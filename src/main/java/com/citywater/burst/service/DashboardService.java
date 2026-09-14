@@ -25,6 +25,7 @@ public class DashboardService {
     private final ElderlyDeliveryRepo elderlyRepo;
     private final MerchantLossRepo lossRepo;
     private final SecondaryTankRepo tankRepo;
+    private final HospitalSupportRepo hospitalSupportRepo;
 
     private static final List<EventStatus> ACTIVE = List.of(
             EventStatus.REPORTED, EventStatus.ASSESSED, EventStatus.DISPATCHED,
@@ -66,6 +67,12 @@ public class DashboardService {
         support.put("abnormalTanks", tankRepo.findAll().stream()
                 .filter(t -> t.getStatus() == TankStatus.LOW || t.getStatus() == TankStatus.EMPTY).count());
         m.put("support", support);
+
+        // 医院应急供水保障：待确认数量与清单（客服端可见，避免重复催问抢修队）
+        List<HospitalSupport> hospitalSupports = hospitalSupportRepo.findAllByOrderByCreatedAtDesc();
+        m.put("hospitalSupportActive",
+                hospitalSupports.stream().filter(s -> s.getStatus() != HospitalSupportStatus.CONFIRMED).count());
+        m.put("hospitalSupports", hospitalSupports);
         return m;
     }
 }

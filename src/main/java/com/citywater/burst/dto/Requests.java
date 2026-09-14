@@ -103,7 +103,28 @@ public final class Requests {
 
     public record TankUpdateReq(Integer levelPercent, TankStatus status, String note) {}
 
-    /** 事件完整详情：评估 + 工单(进度/复供单/复供后问题) + 通知 + 停水保障 */
+    /** 医院应急供水保障 */
+    public record HospitalSupportCreateReq(
+            @NotNull Long eventId,
+            @NotBlank String hospitalName,
+            Boolean needDialysis,
+            Boolean needSurgery,
+            Boolean needSterileSupply,
+            Boolean needInpatient,
+            String logisticsContact,
+            String logisticsPhone) {}
+
+    public record HospitalDispatchReq(@NotBlank String waterTrucks, String tempTanks) {}
+
+    public record HospitalSupplyReq(@NotNull Double waterAmountM3, java.time.LocalDateTime restoreTime) {}
+
+    public record AccessIssueReq(@NotBlank String altWaterPoint, String volunteers) {}
+
+    public record HospitalConfirmReq(@NotBlank String hospitalConfirmer) {}
+
+    public record ReviewReq(@NotBlank String reviewNote) {}
+
+    /** 事件完整详情：评估 + 工单(进度/复供单/复供后问题) + 通知 + 停水保障 + 医疗保障 */
     public record EventDetail(
             BurstEvent event,
             ImpactAssessment assessment,
@@ -112,7 +133,8 @@ public final class Requests {
             List<WaterPoint> waterPoints,
             List<ElderlyDelivery> elderlyDeliveries,
             List<MerchantLoss> merchantLosses,
-            List<SecondaryTank> tanks) {}
+            List<SecondaryTank> tanks,
+            List<HospitalSupport> hospitalSupports) {}
 
     public record OrderDetail(
             RepairOrder order,

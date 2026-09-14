@@ -32,6 +32,7 @@ public class RepairService {
     private final RestorationCheckRepo checkRepo;
     private final ImpactAssessmentRepo assessmentRepo;
     private final NotifyService notifyService;
+    private final HospitalSupportService hospitalSupportService;
     private final CurrentUser currentUser;
 
     public List<RepairOrder> listOrders() {
@@ -97,6 +98,8 @@ public class RepairService {
 
         // 派单即生成首条停水通知
         notifyService.autoNotify(e, saved, RepairStage.DISPATCHED, currentUser.displayName());
+        // 影响医院时自动创建应急供水保障单（优先识别透析/手术/消毒供应/住院楼需求）
+        hospitalSupportService.autoCreateFor(e, a);
         return saved;
     }
 
@@ -211,6 +214,8 @@ public class RepairService {
         e.setRestoredAt(LocalDateTime.now());
         eventRepo.save(e);
 
+        // 复供时间写入医院供水保障单
+        hospitalSupportService.syncRestoreTime(e);
         notifyService.autoNotify(e, saved, RepairStage.COMPLETED, currentUser.displayName());
         return saved;
     }

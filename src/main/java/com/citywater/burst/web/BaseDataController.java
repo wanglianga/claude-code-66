@@ -59,6 +59,7 @@ public class BaseDataController {
         m.put("lossStatus", labels(LossStatus.values()));
         m.put("tankStatus", labels(TankStatus.values()));
         m.put("waterPointStatus", labels(WaterPointStatus.values()));
+        m.put("hospitalSupportStatus", labels(HospitalSupportStatus.values()));
         m.put("facilityType", labels(FacilityType.values()));
         return m;
     }

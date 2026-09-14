@@ -42,6 +42,7 @@ public class BurstService {
     private final ElderlyDeliveryRepo elderlyRepo;
     private final MerchantLossRepo lossRepo;
     private final SecondaryTankRepo tankRepo;
+    private final HospitalSupportRepo hospitalSupportRepo;
     private final CurrentUser currentUser;
 
     public List<BurstEvent> list(EventStatus status) {
@@ -197,7 +198,8 @@ public class BurstService {
                 waterPointRepo.findByEventId(eventId),
                 elderlyRepo.findByEventId(eventId),
                 lossRepo.findByEventId(eventId),
-                tankRepo.findByEventId(eventId));
+                tankRepo.findByEventId(eventId),
+                hospitalSupportRepo.findByEventId(eventId));
     }
 
     /** 关闭事件：必须已复供且复供后问题全部解决，形成完整闭环。 */

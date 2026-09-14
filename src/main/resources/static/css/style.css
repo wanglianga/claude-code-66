@@ -74,6 +74,8 @@ tr:hover td { background: #f8fbff; }
 .badge.REFILLED { background: #d1fae5; color: #047857; }
 .badge.AUTO { background: #e0e7ff; color: #4338ca; }
 .badge.MANUAL { background: #f3e8ff; color: #7e22ce; }
+.badge.SUPPLIED { background: #dbeafe; color: #1d4ed8; }
+.badge.CONFIRMED { background: #d1fae5; color: #047857; }
 
 /* ---------- 按钮 ---------- */
 .btn { display: inline-block; border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; text-decoration: none; }

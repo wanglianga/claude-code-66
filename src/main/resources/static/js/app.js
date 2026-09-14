@@ -91,6 +91,7 @@ const TABS = [
     ['orders', '工单与复供'],
     ['notifications', '客服通知'],
     ['issues', '复供后问题'],
+    ['hospital', '医疗保障'],
     ['support', '停水保障'],
     ['base', '基础资料'],
 ];
@@ -115,7 +116,8 @@ function switchTab(tab) {
 
 function render() {
     const fn = { dashboard: renderDashboard, events: renderEvents, orders: renderOrders,
-        notifications: renderNotifications, issues: renderIssues, support: renderSupport, base: renderBase }[CURRENT_TAB];
+        notifications: renderNotifications, issues: renderIssues, hospital: renderHospital,
+        support: renderSupport, base: renderBase }[CURRENT_TAB];
     fn();
 }
 
@@ -133,7 +135,9 @@ async function renderDashboard() {
         <div class="stat-card"><div class="num">${s.openWaterPoints}</div><div class="lbl">开放送水点</div></div>
         <div class="stat-card"><div class="num ${s.pendingDeliveries > 0 ? 'warn' : ''}">${s.pendingDeliveries}</div><div class="lbl">待送水老人</div></div>
         <div class="stat-card"><div class="num ${s.abnormalTanks > 0 ? 'danger' : ''}">${s.abnormalTanks}</div><div class="lbl">异常二供水箱</div></div>
+        <div class="stat-card"><div class="num ${d.hospitalSupportActive > 0 ? 'warn' : ''}">${d.hospitalSupportActive}</div><div class="lbl">医疗保障待确认</div></div>
     </div>
+    ${d.hospitalSupportActive > 0 ? `<div class="notice">🚑 医疗用水保障进行中：${d.hospitalSupports.filter(x => x.status !== 'CONFIRMED').map(x => esc(x.hospitalName) + '（' + label(x.status) + '）').join('、')}。医院确认后客服端将显示「医疗用水保障完成」，无需重复催问抢修队。</div>` : (d.hospitalSupports.length ? '<div class="notice" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">✅ 医疗用水保障完成，各医院用水已由医院方确认。</div>' : '')}
     ${d.longOutageEvents.length ? `<div class="notice danger">⚠️ 长时停水预警：${d.longOutageEvents.map(e => esc(e.eventNo + ' ' + e.location)).join('；')}，请关注临时水点、老人送水与二次供水水箱。</div>` : ''}
     <div class="grid-2">
         <div class="panel"><h3>在办事件</h3>${eventTable(d.activeList, true)}</div>
@@ -144,7 +148,17 @@ async function renderDashboard() {
 
 /* ---------------- 爆管事件 ---------------- */
 async function renderEvents(status) {
-    const list = await api('/api/events' + (status ? '?status=' + status : ''));
+    const [list, hsList] = await Promise.all([
+        api('/api/events' + (status ? '?status=' + status : '')),
+        api('/api/hospital-support')
+    ]);
+    // 事件 -> 医疗保障状态映射（客服端可见，避免重复催问抢修队）
+    const hsMap = {};
+    for (const s of hsList) {
+        const k = s.event.id;
+        hsMap[k] = hsMap[k] || [];
+        hsMap[k].push(s);
+    }
     const statusOpts = Object.entries(ENUMS.eventStatus).map(([k, v]) =>
         `<option value="${k}" ${k === status ? 'selected' : ''}>${v}</option>`).join('');
     $('#main').innerHTML = `
@@ -156,16 +170,25 @@ async function renderEvents(status) {
         </div>
         ${canOps() ? '<button class="btn btn-primary" onclick="showEventCreate()">＋ 新建报警</button>' : ''}
     </div>
-    <div class="panel">${eventTable(list)}</div>`;
+    <div class="panel">${eventTable(list, false, hsMap)}</div>`;
 }
 
-function eventTable(list, compact) {
+function hsBadge(list) {
+    if (!list || !list.length) return '<span class="muted">—</span>';
+    return list.every(s => s.status === 'CONFIRMED')
+        ? '<span class="badge CONFIRMED">✅ 医疗用水保障完成</span>'
+        : '<span class="badge DELIVERING">🚑 医疗保障中</span>';
+}
+
+function eventTable(list, compact, hsMap) {
     if (!list || !list.length) return '<div class="empty">暂无事件</div>';
+    const showHs = !!hsMap;
     return `<table><thead><tr>
-        <th>事件编号</th><th>来源</th><th>位置</th><th>分区</th><th>级别</th><th>状态</th><th>报警时间</th><th>操作</th>
+        <th>事件编号</th><th>来源</th><th>位置</th><th>分区</th><th>级别</th><th>状态</th>${showHs ? '<th>医疗保障</th>' : ''}<th>报警时间</th><th>操作</th>
         </tr></thead><tbody>` + list.map(e => `<tr>
         <td>${esc(e.eventNo)}</td><td>${esc(label(e.source))}</td><td>${esc(e.location)}</td>
         <td>${esc(e.zone ? e.zone.name : '')}</td><td>${badge(e.severity)}</td><td>${badge(e.status)}</td>
+        ${showHs ? `<td>${hsBadge(hsMap[e.id])}</td>` : ''}
         <td>${fmt(e.createdAt)}</td>
         <td><button class="btn btn-sm" onclick="showEventDetail(${e.id})">详情</button></td>
         </tr>`).join('') + '</tbody></table>';
@@ -250,6 +273,11 @@ async function showEventDetail(id) {
     if (!d.orders.length) html += '<div class="empty">尚未派单</div>';
     for (const od of d.orders) html += orderBlock(od);
     html += '</div>';
+
+    if (d.hospitalSupports && d.hospitalSupports.length) {
+        html += `<div class="detail-section"><h4>医院应急供水保障（${d.hospitalSupports.length}）</h4>`
+            + d.hospitalSupports.map(hsCard).join('') + '</div>';
+    }
 
     html += `<div class="detail-section"><h4>客服通知记录（${d.notifications.length}）</h4>${notifyTable(d.notifications)}</div>`;
 
@@ -690,6 +718,174 @@ function showTankUpdate(id, level, status) {
 async function submitTankUpdate(id) {
     const d = formData('f'); d.levelPercent = Number(d.levelPercent || 0);
     await run(() => post('/api/support/tanks/' + id, d), '已更新');
+}
+
+/* ---------------- 医院应急供水保障 ---------------- */
+function hsNeeds(s) {
+    const n = [];
+    if (s.needDialysis) n.push('透析');
+    if (s.needSurgery) n.push('手术');
+    if (s.needSterileSupply) n.push('消毒供应');
+    if (s.needInpatient) n.push('住院楼');
+    return n.join('、') || '-';
+}
+
+function hsActions(s) {
+    const b = [];
+    if (canOps() && (s.status === 'PENDING' || s.status === 'DELIVERING'))
+        b.push(`<button class="btn btn-primary btn-sm" onclick="showHsDispatch(${s.id})">调度供水车</button>`);
+    if (canOps() && s.status === 'DELIVERING')
+        b.push(`<button class="btn btn-ok btn-sm" onclick="showHsSupply(${s.id})">供水到位</button>`);
+    if (canCs() && s.status !== 'CONFIRMED' && !s.truckAccessIssue)
+        b.push(`<button class="btn btn-sm" onclick="showHsAccess(${s.id})">车辆无法进院</button>`);
+    if (canCs() && s.status === 'SUPPLIED')
+        b.push(`<button class="btn btn-ok btn-sm" onclick="showHsConfirm(${s.id})">医院确认</button>`);
+    if (canOps())
+        b.push(`<button class="btn btn-sm" onclick="showHsReview(${s.id})">复盘记录</button>`);
+    return b.join('');
+}
+
+function hsCard(s) {
+    return `<div class="panel" style="background:#fbfdff">
+        <div class="kv">
+            <div><b>医院</b>${esc(s.hospitalName)} ${badge(s.status)}</div>
+            <div><b>优先需求</b>${hsNeeds(s)}</div>
+            <div><b>后勤联系</b>${esc(s.logisticsContact) || '-'} ${esc(s.logisticsPhone) || ''}</div>
+            <div><b>供水车</b>${esc(s.waterTrucks) || '待调度'}</div>
+            <div><b>临时水箱</b>${esc(s.tempTanks) || '-'}</div>
+            <div><b>供水到位</b>${fmt(s.arrivedAt)}</div>
+            <div><b>用水量</b>${s.waterAmountM3 != null ? s.waterAmountM3 + ' m³' : '-'}</div>
+            <div><b>复供时间</b>${fmt(s.restoreTime)}</div>
+            ${s.truckAccessIssue ? `<div><b>车辆无法进院</b>改设水点：${esc(s.altWaterPoint) || '-'}；志愿者送水：${esc(s.volunteers) || '-'}</div>` : ''}
+            ${s.hospitalConfirmer ? `<div><b>医院确认</b>${esc(s.hospitalConfirmer)} ${fmt(s.confirmedAt)}</div>` : ''}
+            ${s.reviewNote ? `<div><b>复盘</b>${esc(s.reviewNote)}</div>` : ''}
+        </div>
+        <div class="actions" style="margin-top:8px">${hsActions(s)}</div>
+    </div>`;
+}
+
+async function renderHospital() {
+    const list = await api('/api/hospital-support');
+    $('#main').innerHTML = `
+    <div class="toolbar">
+        <div class="muted">爆管影响医院时自动建单：优先保障透析 / 手术 / 消毒供应 / 住院楼。医院确认后客服端显示「医疗用水保障完成」，无需重复催问抢修队。</div>
+        ${canOps() ? '<button class="btn btn-primary" onclick="showHsCreate()">＋ 手动登记</button>' : ''}
+    </div>
+    <div class="panel">${!list.length ? '<div class="empty">暂无医疗保障单（派单时按影响评估自动创建）</div>' :
+        `<table><thead><tr><th>事件</th><th>医院</th><th>优先需求</th><th>供水车/水箱</th><th>状态</th><th>到位/用水量</th><th>复供时间</th><th>确认人</th><th>操作</th></tr></thead><tbody>`
+        + list.map(s => `<tr>
+            <td>${esc(s.event.eventNo)}</td>
+            <td>${esc(s.hospitalName)}${s.truckAccessIssue ? '<br><span class="badge CROWDED">车辆改设水点</span>' : ''}</td>
+            <td>${hsNeeds(s)}</td>
+            <td>${esc(s.waterTrucks) || '待调度'}${s.tempTanks ? '<br>' + esc(s.tempTanks) : ''}</td>
+            <td>${badge(s.status)}${s.status === 'CONFIRMED' ? '<br><span class="badge CONFIRMED">医疗用水保障完成</span>' : ''}</td>
+            <td>${fmt(s.arrivedAt)}${s.waterAmountM3 != null ? '<br>' + s.waterAmountM3 + ' m³' : ''}</td>
+            <td>${fmt(s.restoreTime)}</td>
+            <td>${esc(s.hospitalConfirmer) || '-'}</td>
+            <td><div class="actions">${hsActions(s)}</div></td>
+        </tr>`).join('') + '</tbody></table>'}</div>`;
+}
+
+async function showHsCreate() {
+    const events = await api('/api/events');
+    const evOpts = events.map(e => `<option value="${e.id}">${esc(e.eventNo)} ${esc(e.location)}</option>`).join('');
+    openModal('手动登记医疗保障单', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label class="full">关联事件<select name="eventId">${evOpts}</select></label>
+        <label>医院名称<input name="hospitalName" required></label>
+        <label>后勤联系人<input name="logisticsContact"></label>
+        <label>联系电话<input name="logisticsPhone"></label>
+        <div class="full checks">
+            <label><input type="checkbox" name="needDialysis" checked> 透析</label>
+            <label><input type="checkbox" name="needSurgery" checked> 手术</label>
+            <label><input type="checkbox" name="needSterileSupply" checked> 消毒供应</label>
+            <label><input type="checkbox" name="needInpatient" checked> 住院楼</label>
+        </div>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitHsCreate()">登记</button></div>`);
+}
+async function submitHsCreate() {
+    const d = formData('f');
+    if (!d.hospitalName) { toast('请填写医院名称', true); return; }
+    d.eventId = Number(d.eventId);
+    for (const k of ['needDialysis','needSurgery','needSterileSupply','needInpatient']) d[k] = d[k] === 'on';
+    await run(() => post('/api/hospital-support', d), '保障单已登记');
+}
+
+function showHsDispatch(id) {
+    openModal('调度供水车与临时水箱', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label class="full">供水车 *<input name="waterTrucks" required placeholder="如 供水车2辆（浙A·D1234、浙A·D5678）"></label>
+        <label class="full">临时水箱<input name="tempTanks" placeholder="如 5m³×2（住院楼前）"></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitHsDispatch(${id})">派出</button></div>`);
+}
+async function submitHsDispatch(id) {
+    const d = formData('f');
+    if (!d.waterTrucks) { toast('请填写供水车信息', true); return; }
+    await run(() => post(`/api/hospital-support/${id}/dispatch`, d), '供水车已派出');
+}
+
+function showHsSupply(id) {
+    openModal('供水到位登记（写入抢修事件）', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label>累计用水量 (m³) *<input name="waterAmountM3" type="number" step="0.1" min="0" required></label>
+        <label>预计/实际复供时间（可留空，复供后自动回填）<input name="restoreTime" type="datetime-local"></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitHsSupply(${id})">确认到位</button></div>`);
+}
+async function submitHsSupply(id) {
+    const d = formData('f');
+    if (!d.waterAmountM3) { toast('请填写用水量', true); return; }
+    d.waterAmountM3 = Number(d.waterAmountM3);
+    await run(() => post(`/api/hospital-support/${id}/supply`, d), '供水到位已记录');
+}
+
+function showHsAccess(id) {
+    openModal('供水车无法进入院区', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label class="full">改设水点 *<input name="altWaterPoint" required placeholder="如 医院东门对面人行道临时水点"></label>
+        <label class="full">志愿者送水安排<input name="volunteers" placeholder="如 志愿者3人轮班送水至住院楼、透析中心"></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitHsAccess(${id})">记录</button></div>`);
+}
+async function submitHsAccess(id) {
+    const d = formData('f');
+    if (!d.altWaterPoint) { toast('请填写改设水点', true); return; }
+    await run(() => post(`/api/hospital-support/${id}/access-issue`, d), '已记录改设水点与志愿者送水');
+}
+
+function showHsConfirm(id) {
+    openModal('医院确认用水保障', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label class="full">医院确认人 *<input name="hospitalConfirmer" required placeholder="如 后勤科-李主任"></label>
+    </form>
+    <div class="notice">医院确认后，客服端将显示「医疗用水保障完成」，普通客服无需再催问抢修队。</div>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-ok" onclick="submitHsConfirm(${id})">医院已确认</button></div>`);
+}
+async function submitHsConfirm(id) {
+    const d = formData('f');
+    if (!d.hospitalConfirmer) { toast('请填写医院确认人', true); return; }
+    await run(() => post(`/api/hospital-support/${id}/confirm`, d), '医疗用水保障完成');
+}
+
+function showHsReview(id) {
+    openModal('复盘记录（纳入事件复盘）', `
+    <form id="f" onsubmit="return false">
+        <label style="display:block">保障过程复盘<textarea name="reviewNote" rows="4" style="width:100%;margin-top:6px;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="如 供水车无法进院，改设东门水点并由志愿者送水，透析中心未中断治疗"></textarea></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitHsReview(${id})">保存复盘</button></div>`);
+}
+async function submitHsReview(id) {
+    const d = formData('f');
+    if (!d.reviewNote) { toast('请填写复盘内容', true); return; }
+    await run(() => post(`/api/hospital-support/${id}/review`, d), '复盘已记录');
 }
 
 /* ---------------- 基础资料 ---------------- */
