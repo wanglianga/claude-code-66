@@ -57,6 +57,16 @@ public class RepairService {
         ImpactAssessment a = assessmentRepo.findByEventId(eventId)
                 .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST, "缺少影响评估，无法派单"));
 
+        // 派单资料门禁：开挖许可、备件库存、应急送水点缺一不可，缺失时事件保持“已评估”
+        List<String> missing = new ArrayList<>();
+        if (isBlank(req.excavationPermitNo())) missing.add("开挖许可");
+        if (isBlank(req.spareParts())) missing.add("备件库存");
+        if (isBlank(req.waterPoints())) missing.add("应急送水点");
+        if (!missing.isEmpty()) {
+            throw new ResponseStatusException(BAD_REQUEST,
+                    "派单资料不完整，缺少: " + String.join("、", missing));
+        }
+
         RepairOrder o = new RepairOrder();
         o.setOrderNo("R" + e.getEventNo().substring(1) + "-" + (orderRepo.findByEventIdOrderByCreatedAtDesc(eventId).size() + 1));
         o.setEvent(e);
@@ -91,7 +101,9 @@ public class RepairService {
     }
 
     /**
-     * 现场进度上报：阶段只能向前推进；每次推进自动刷新客服通知内容。
+     * 现场进度上报：阶段严格按顺序逐段推进（到场→关阀→开挖→换管→冲洗→消毒→
+     * 压力测试→道路恢复），保证事件时间线保留全部现场阶段；
+     * 每次推进自动刷新客服通知内容。
      */
     @Transactional
     public ProgressLog addProgress(long orderId, ProgressReq req) {
@@ -100,9 +112,16 @@ public class RepairService {
         if (stage == RepairStage.COMPLETED) {
             throw new ResponseStatusException(BAD_REQUEST, "工单完成须通过复供确认，不能直接上报");
         }
-        if (stage.getOrder() <= o.getStage().getOrder()) {
+        if (o.getStage() == RepairStage.COMPLETED) {
+            throw new ResponseStatusException(BAD_REQUEST, "工单已完成，不能再上报现场进度");
+        }
+        if (o.getStage() == RepairStage.ROAD_RESTORED) {
+            throw new ResponseStatusException(BAD_REQUEST, "现场阶段已全部记录完毕，请提交复供确认");
+        }
+        RepairStage next = nextStage(o.getStage());
+        if (next == null || stage.getOrder() != next.getOrder()) {
             throw new ResponseStatusException(BAD_REQUEST,
-                    "阶段只能向前推进，当前阶段: " + o.getStage().getLabel());
+                    "现场阶段须按顺序逐段推进，下一阶段应为: " + (next != null ? next.getLabel() : "无"));
         }
         ProgressLog log = new ProgressLog();
         log.setOrder(o);
@@ -159,14 +178,15 @@ public class RepairService {
     }
 
     /**
-     * 复供放行：必须四项确认全部通过，且现场进度已到压力测试阶段。
+     * 复供放行：必须完成道路恢复（全部现场阶段已按序记录），
+     * 且水压、水质、管网冲洗、用户通知四项确认全部通过。
      */
     @Transactional
     public RepairOrder confirmRestore(long orderId) {
         RepairOrder o = getOrder(orderId);
-        if (o.getStage().getOrder() < RepairStage.PRESSURE_TEST.getOrder()) {
+        if (o.getStage().getOrder() < RepairStage.ROAD_RESTORED.getOrder()) {
             throw new ResponseStatusException(BAD_REQUEST,
-                    "现场进度未到压力测试阶段，不能复供，当前阶段: " + o.getStage().getLabel());
+                    "道路恢复未完成，不能复供，当前阶段: " + o.getStage().getLabel());
         }
         RestorationCheck c = checkRepo.findByOrderId(orderId)
                 .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST, "尚未填写复供确认单"));
@@ -193,6 +213,15 @@ public class RepairService {
 
         notifyService.autoNotify(e, saved, RepairStage.COMPLETED, currentUser.displayName());
         return saved;
+    }
+
+    private RepairStage nextStage(RepairStage current) {
+        for (RepairStage s : RepairStage.values()) {
+            if (s.getOrder() == current.getOrder() + 1) {
+                return s;
+            }
+        }
+        return null;
     }
 
     private boolean bool(Boolean b) {

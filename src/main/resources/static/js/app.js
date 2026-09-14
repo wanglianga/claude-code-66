@@ -324,9 +324,9 @@ async function showDispatch(eventId) {
         <label>联系电话<input name="crewPhone"></label>
         <label>预计停水时长(小时)<input name="estimatedRestoreHours" type="number" min="1" value="${a ? a.estimatedOutageHours : 4}"></label>
         <label class="full">阀门位置与关阀操作<textarea name="valveOps">${a ? esc(a.valvePlan) : ''}</textarea></label>
-        <label>开挖许可编号<input name="excavationPermitNo" placeholder="挖许字2026-XXXX"></label>
-        <label>备件库存确认<input name="spareParts" placeholder="管段/管件/消毒剂"></label>
-        <label class="full">应急送水点<input name="waterPoints" placeholder="如 阳光高层小区东门、人民医院急诊楼前"></label>
+        <label>开挖许可编号 *<input name="excavationPermitNo" required placeholder="挖许字2026-XXXX"></label>
+        <label>备件库存确认 *<input name="spareParts" required placeholder="管段/管件/消毒剂"></label>
+        <label class="full">应急送水点 *<input name="waterPoints" required placeholder="如 阳光高层小区东门、人民医院急诊楼前"></label>
         <label class="full">交通协管方案<input name="trafficPlan" placeholder="如 中山路双向各封闭一条车道"></label>
         <div class="full checks">
             <label><input type="checkbox" name="trafficControl" ${a && a.roadAffected ? 'checked' : ''}> 需要交通协管</label>
@@ -346,6 +346,9 @@ async function showDispatch(eventId) {
 async function submitDispatch(eventId) {
     const d = formData('f');
     if (!d.teamName || !d.crewLeader) { toast('请填写抢修队与带队人', true); return; }
+    if (!d.excavationPermitNo || !d.spareParts || !d.waterPoints) {
+        toast('开挖许可、备件库存、应急送水点为派单必填项', true); return;
+    }
     for (const k of ['trafficControl','involveCs','involveStreet','involveProperty','involveWaterTruck','involveQuality'])
         d[k] = d[k] === 'on';
     d.estimatedRestoreHours = Number(d.estimatedRestoreHours || 4);
@@ -353,13 +356,14 @@ async function submitDispatch(eventId) {
 }
 
 function showProgress(orderId, currentStage) {
-    const opts = Object.entries(ENUMS.repairStage)
-        .filter(([k]) => k !== 'COMPLETED' && stageOrder(k) > stageOrder(currentStage))
-        .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    // 严格按顺序推进：只允许上报下一顺序阶段，保证时间线保留全部现场阶段
+    const next = Object.keys(ENUMS.repairStage)
+        .find(s => s !== 'COMPLETED' && stageOrder(s) === stageOrder(currentStage) + 1);
+    if (!next) { toast('现场阶段已全部记录完毕，请提交复供确认', true); return; }
     openModal('上报现场进度', `
     <form id="f" class="form-grid" onsubmit="return false">
         <label>当前阶段<select disabled><option>${esc(label(currentStage))}</option></select></label>
-        <label>推进到<select name="stage">${opts}</select></label>
+        <label>推进到（按顺序）<select name="stage"><option value="${next}">${esc(label(next))}</option></select></label>
         <label class="full">现场记录<textarea name="note" placeholder="如 V-101、V-102 已关闭，止水完成"></textarea></label>
     </form>
     <div class="form-actions">
