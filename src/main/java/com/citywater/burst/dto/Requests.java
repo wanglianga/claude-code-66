@@ -124,18 +124,18 @@ public final class Requests {
 
     public record ReviewReq(@NotBlank String reviewNote) {}
 
-    /** 复供黄水投诉处理 */
+    /** 复供黄水投诉处理（水质检测点、楼栋高度、居民照片为必填关联资料） */
     public record YellowWaterCreateReq(
             @NotNull Long orderId,
             @NotNull ComplaintType complaintType,
             @NotBlank String community,
             String building,
-            Integer floors,
+            @NotNull Integer floors,
             String reporterName,
             String reporterPhone,
             String description,
-            String samplePoint,
-            String photoUrls,
+            @NotBlank String samplePoint,
+            @NotBlank String photoUrls,
             Long issueId) {}
 
     public record YellowWaterHandleReq(

@@ -16,15 +16,16 @@ function esc(s) {
 
 function fmt(t) { return t ? String(t).substring(0, 16) : '-'; }
 
-function label(v) {
+function label(group, v) {
     if (!v) return '-';
-    for (const k in ENUMS) { if (ENUMS[k] && ENUMS[k][v]) return ENUMS[k][v]; }
+    // 枚举值在不同分组间会重名（如 DONE：已送达/已办结），必须按分组取值，保证状态显示稳定
+    if (group && ENUMS[group] && ENUMS[group][v]) return ENUMS[group][v];
     return v;
 }
 
-function badge(v) {
+function badge(group, v) {
     if (!v) return '-';
-    return `<span class="badge ${esc(v)}">${esc(label(v))}</span>`;
+    return `<span class="badge ${esc(v)}">${esc(label(group, v))}</span>`;
 }
 
 function toast(msg, isErr) {
@@ -141,7 +142,7 @@ async function renderDashboard() {
         <div class="stat-card"><div class="num ${d.watchCommunities > 0 ? 'danger' : ''}">${d.watchCommunities}</div><div class="lbl">重点水质观察小区</div></div>
     </div>
     ${d.watchList && d.watchList.length ? `<div class="notice danger">⚠️ 重点水质观察：${d.watchList.map(w => esc(w.community) + '（投诉' + w.complaintCount + '次）').join('、')}</div>` : ''}
-    ${d.hospitalSupportActive > 0 ? `<div class="notice">🚑 医疗用水保障进行中：${d.hospitalSupports.filter(x => x.status !== 'CONFIRMED').map(x => esc(x.hospitalName) + '（' + label(x.status) + '）').join('、')}。医院确认后客服端将显示「医疗用水保障完成」，无需重复催问抢修队。</div>` : (d.hospitalSupports.length ? '<div class="notice" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">✅ 医疗用水保障完成，各医院用水已由医院方确认。</div>' : '')}
+    ${d.hospitalSupportActive > 0 ? `<div class="notice">🚑 医疗用水保障进行中：${d.hospitalSupports.filter(x => x.status !== 'CONFIRMED').map(x => esc(x.hospitalName) + '（' + label('hospitalSupportStatus', x.status) + '）').join('、')}。医院确认后客服端将显示「医疗用水保障完成」，无需重复催问抢修队。</div>` : (d.hospitalSupports.length ? '<div class="notice" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">✅ 医疗用水保障完成，各医院用水已由医院方确认。</div>' : '')}
     ${d.longOutageEvents.length ? `<div class="notice danger">⚠️ 长时停水预警：${d.longOutageEvents.map(e => esc(e.eventNo + ' ' + e.location)).join('；')}，请关注临时水点、老人送水与二次供水水箱。</div>` : ''}
     <div class="grid-2">
         <div class="panel"><h3>在办事件</h3>${eventTable(d.activeList, true)}</div>
@@ -190,8 +191,8 @@ function eventTable(list, compact, hsMap) {
     return `<table><thead><tr>
         <th>事件编号</th><th>来源</th><th>位置</th><th>分区</th><th>级别</th><th>状态</th>${showHs ? '<th>医疗保障</th>' : ''}<th>报警时间</th><th>操作</th>
         </tr></thead><tbody>` + list.map(e => `<tr>
-        <td>${esc(e.eventNo)}</td><td>${esc(label(e.source))}</td><td>${esc(e.location)}</td>
-        <td>${esc(e.zone ? e.zone.name : '')}</td><td>${badge(e.severity)}</td><td>${badge(e.status)}</td>
+        <td>${esc(e.eventNo)}</td><td>${esc(label('eventSource', e.source))}</td><td>${esc(e.location)}</td>
+        <td>${esc(e.zone ? e.zone.name : '')}</td><td>${badge('severity', e.severity)}</td><td>${badge('eventStatus', e.status)}</td>
         ${showHs ? `<td>${hsBadge(hsMap[e.id])}</td>` : ''}
         <td>${fmt(e.createdAt)}</td>
         <td><button class="btn btn-sm" onclick="showEventDetail(${e.id})">详情</button></td>
@@ -232,10 +233,10 @@ async function showEventDetail(id) {
     const e = d.event, a = d.assessment;
     let html = `
     <div class="detail-section">
-        <h4>事件信息 ${badge(e.status)} ${badge(e.severity)}</h4>
+        <h4>事件信息 ${badge('eventStatus', e.status)} ${badge('severity', e.severity)}</h4>
         <div class="kv">
             <div><b>编号</b>${esc(e.eventNo)}</div>
-            <div><b>来源</b>${esc(label(e.source))}</div>
+            <div><b>来源</b>${esc(label('eventSource', e.source))}</div>
             <div><b>位置</b>${esc(e.location)}</div>
             <div><b>分区</b>${esc(e.zone.name)}</div>
             <div><b>描述</b>${esc(e.description) || '-'}</div>
@@ -268,7 +269,7 @@ async function showEventDetail(id) {
             <div><b>评估人</b>${esc(a.assessor)} ${fmt(a.createdAt)}</div>
         </div>
         ${a.affectedFacilities && a.affectedFacilities.length ? `<table style="margin-top:8px"><thead><tr><th>受影响设施</th><th>类型</th><th>人口</th><th>联系人</th><th>备注</th></tr></thead><tbody>
-            ${a.affectedFacilities.map(f => `<tr><td>${esc(f.name)}${f.highRise ? '（高层）' : ''}</td><td>${esc(label(f.type))}</td><td>${f.population}</td><td>${esc(f.contactName) || '-'} ${esc(f.contactPhone) || ''}</td><td>${esc(f.note) || '-'}</td></tr>`).join('')}
+            ${a.affectedFacilities.map(f => `<tr><td>${esc(f.name)}${f.highRise ? '（高层）' : ''}</td><td>${esc(label('facilityType', f.type))}</td><td>${f.population}</td><td>${esc(f.contactName) || '-'} ${esc(f.contactPhone) || ''}</td><td>${esc(f.note) || '-'}</td></tr>`).join('')}
         </tbody></table>` : ''}
     </div>`;
     }
@@ -288,8 +289,8 @@ async function showEventDetail(id) {
     html += `<div class="detail-section"><h4>停水保障</h4>
         <div class="kv">
             <div><b>送水点</b>${d.waterPoints.map(p => esc(p.name) + '(排队' + p.queueLength + '人)').join('、') || '无'}</div>
-            <div><b>老人送水</b>${d.elderlyDeliveries.map(x => esc(x.elderName) + '[' + label(x.status) + ']').join('、') || '无'}</div>
-            <div><b>商户损失</b>${d.merchantLosses.map(x => esc(x.merchantName) + '[' + label(x.status) + ']').join('、') || '无'}</div>
+            <div><b>老人送水</b>${d.elderlyDeliveries.map(x => esc(x.elderName) + '[' + label('aidStatus', x.status) + ']').join('、') || '无'}</div>
+            <div><b>商户损失</b>${d.merchantLosses.map(x => esc(x.merchantName) + '[' + label('lossStatus', x.status) + ']').join('、') || '无'}</div>
             <div><b>二供水箱</b>${d.tanks.map(x => esc(x.community + x.building) + '水位' + x.levelPercent + '%').join('、') || '无'}</div>
         </div>
         <div class="muted" style="margin-top:4px">在「停水保障」页签中维护以上记录。</div>
@@ -304,7 +305,7 @@ function orderBlock(od) {
         stageOrder(s) > stageOrder(o.stage));
     return `<div class="panel" style="background:#fbfdff">
         <div class="kv">
-            <div><b>工单号</b>${esc(o.orderNo)} ${badge(o.stage)}</div>
+            <div><b>工单号</b>${esc(o.orderNo)} ${badge('repairStage', o.stage)}</div>
             <div><b>抢修队</b>${esc(o.teamName)} ${esc(o.crewLeader)} ${esc(o.crewPhone) || ''}</div>
             <div><b>预计复供</b>${fmt(o.estimatedRestoreTime)}</div>
             <div><b>开挖许可</b>${esc(o.excavationPermitNo) || '-'}</div>
@@ -321,17 +322,16 @@ function orderBlock(od) {
             ${canOps() && o.stage !== 'COMPLETED' ? `<button class="btn btn-ok btn-sm" onclick="doConfirmRestore(${o.id})">确认复供</button>` : ''}
         </div>
         <div class="timeline">
-            ${od.logs.map(l => `<div class="t-item"><b>${esc(label(l.stage))}</b> ${esc(l.note) || ''}
+            ${od.logs.map(l => `<div class="t-item"><b>${esc(label('repairStage', l.stage))}</b> ${esc(l.note) || ''}
                 <div class="t-time">${fmt(l.createdAt)} · ${esc(l.operatorName)}</div></div>`).join('') || '<div class="empty">暂无现场记录</div>'}
         </div>
         ${c ? `<div class="notice" style="margin-top:8px">复供确认：水压${c.pressureOk ? '✅' : '⬜'} 水质${c.qualityOk ? '✅' : '⬜'} 冲洗${c.flushingOk ? '✅' : '⬜'} 通知${c.notificationOk ? '✅' : '⬜'}
             ${c.turbidity != null ? '｜浊度 ' + c.turbidity + ' NTU' : ''}${c.residualChlorine != null ? '｜余氯 ' + c.residualChlorine + ' mg/L' : ''}
             ${c.confirmedBy ? '｜复供确认人：' + esc(c.confirmedBy) + ' ' + fmt(c.confirmedAt) : ''}</div>` : ''}
         ${od.issues.length ? `<table style="margin-top:6px"><thead><tr><th>复供后问题</th><th>类型</th><th>状态</th><th>时间</th></tr></thead><tbody>
-            ${od.issues.map(i => `<tr><td>${esc(i.description)}</td><td>${esc(label(i.type))}</td><td>${badge(i.status)}</td><td>${fmt(i.createdAt)}</td></tr>`).join('')}
+            ${od.issues.map(i => `<tr><td>${esc(i.description)}</td><td>${esc(label('issueType', i.type))}</td><td>${badge('issueStatus', i.status)}</td><td>${fmt(i.createdAt)}</td></tr>`).join('')}
         </tbody></table>` : ''}
-        ${od.yellowWaterCases && od.yellowWaterCases.length ? `<div class="muted" style="margin-top:6px">黄水/异味投诉 ${od.yellowWaterCases.length} 件：${od.yellowWaterCases.map(y => esc(y.community) + (y.building || '') + '[' + label(y.complaintType) + '/' + label(y.status) + (y.responsibility && y.responsibility !== 'UNDETERMINED' ? '/' + label(y.responsibility) : '') + ']').join('、')}</div>` : ''}
-        ${od.yellowWaterCases && od.yellowWaterCases.length ? `<div class="muted" style="margin-top:6px">黄水/异味投诉 ${od.yellowWaterCases.length} 件：${od.yellowWaterCases.map(y => esc(y.community) + (y.building || '') + '[' + label(y.status) + (y.propertyInspectAdvised ? '·已提示物业' : '') + ']').join('、')}（在「黄水处理」页签处理）</div>` : ''}
+        ${od.yellowWaterCases && od.yellowWaterCases.length ? `<div class="muted" style="margin-top:6px">黄水/异味投诉 ${od.yellowWaterCases.length} 件：${od.yellowWaterCases.map(y => esc(y.community) + (y.building || '') + '[' + label('complaintType', y.complaintType) + '/' + label('ywStatus', y.status) + (y.responsibility && y.responsibility !== 'UNDETERMINED' ? '/' + label('responsibility', y.responsibility) : '') + ']').join('、')}</div>` : ''}
     </div>`;
 }
 
@@ -396,8 +396,8 @@ function showProgress(orderId, currentStage) {
     if (!next) { toast('现场阶段已全部记录完毕，请提交复供确认', true); return; }
     openModal('上报现场进度', `
     <form id="f" class="form-grid" onsubmit="return false">
-        <label>当前阶段<select disabled><option>${esc(label(currentStage))}</option></select></label>
-        <label>推进到（按顺序）<select name="stage"><option value="${next}">${esc(label(next))}</option></select></label>
+        <label>当前阶段<select disabled><option>${esc(label('repairStage', currentStage))}</option></select></label>
+        <label>推进到（按顺序）<select name="stage"><option value="${next}">${esc(label('repairStage', next))}</option></select></label>
         <label class="full">现场记录<textarea name="note" placeholder="如 V-101、V-102 已关闭，止水完成"></textarea></label>
     </form>
     <div class="form-actions">
@@ -454,7 +454,7 @@ async function renderOrders() {
         <th>工单号</th><th>事件</th><th>位置</th><th>抢修队</th><th>阶段</th><th>预计复供</th><th>协同方</th><th>操作</th>
         </tr></thead><tbody>` + list.map(o => `<tr>
         <td>${esc(o.orderNo)}</td><td>${esc(o.event.eventNo)}</td><td>${esc(o.event.location)}</td>
-        <td>${esc(o.teamName)}</td><td>${badge(o.stage)}</td><td>${fmt(o.estimatedRestoreTime)}</td>
+        <td>${esc(o.teamName)}</td><td>${badge('repairStage', o.stage)}</td><td>${fmt(o.estimatedRestoreTime)}</td>
         <td>${['involveCs:客服','involveStreet:街道','involveProperty:物业','involveWaterTruck:供水车','involveQuality:水质']
             .filter(s => o[s.split(':')[0]]).map(s => s.split(':')[1]).join('、') || '-'}</td>
         <td><button class="btn btn-sm" onclick="showEventDetail(${o.event.id})">详情</button></td>
@@ -474,15 +474,15 @@ function notifyTable(list) {
     if (!list || !list.length) return '<div class="empty">暂无通知</div>';
     return `<table><thead><tr><th>时间</th><th>渠道</th><th>目标人群</th><th>内容</th><th>阶段</th><th>方式</th><th>发送人</th></tr></thead><tbody>`
         + list.map(n => `<tr>
-        <td>${fmt(n.createdAt)}</td><td>${esc(label(n.channel))}</td><td>${esc(n.audience)}</td>
+        <td>${fmt(n.createdAt)}</td><td>${esc(label('notifyChannel', n.channel))}</td><td>${esc(n.audience)}</td>
         <td style="max-width:420px">${esc(n.content)}</td>
-        <td>${esc(label(n.stage))}</td><td><span class="badge ${n.sendMode}">${n.sendMode === 'AUTO' ? '自动' : '手动'}</span></td><td>${esc(n.sentBy)}</td>
+        <td>${esc(label('repairStage', n.stage))}</td><td><span class="badge ${n.sendMode}">${n.sendMode === 'AUTO' ? '自动' : '手动'}</span></td><td>${esc(n.sentBy)}</td>
         </tr>`).join('') + '</tbody></table>';
 }
 
 async function showNotifySend() {
     const events = await api('/api/events');
-    const evOpts = events.map(e => `<option value="${e.id}">${esc(e.eventNo)} ${esc(e.location)}（${esc(label(e.status))}）</option>`).join('');
+    const evOpts = events.map(e => `<option value="${e.id}">${esc(e.eventNo)} ${esc(e.location)}（${esc(label('eventStatus', e.status))}）</option>`).join('');
     const chOpts = Object.entries(ENUMS.notifyChannel).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
     openModal('发送客服通知', `
     <form id="f" class="form-grid" onsubmit="return false">
@@ -527,9 +527,9 @@ function issueTable(list, compact) {
     if (!list || !list.length) return '<div class="empty">暂无记录</div>';
     return `<table><thead><tr><th>时间</th><th>工单</th><th>类型</th><th>描述</th><th>联系人</th><th>状态</th><th>处理</th></tr></thead><tbody>`
         + list.map(i => `<tr>
-        <td>${fmt(i.createdAt)}</td><td>${esc(i.order ? i.order.orderNo : '')}</td><td>${esc(label(i.type))}</td>
+        <td>${fmt(i.createdAt)}</td><td>${esc(i.order ? i.order.orderNo : '')}</td><td>${esc(label('issueType', i.type))}</td>
         <td style="max-width:320px">${esc(i.description)}${i.handleNote ? '<br><span class="muted">处理：' + esc(i.handleNote) + '</span>' : ''}</td>
-        <td>${esc(i.contactName) || '-'} ${esc(i.contactPhone) || ''}</td><td>${badge(i.status)}</td>
+        <td>${esc(i.contactName) || '-'} ${esc(i.contactPhone) || ''}</td><td>${badge('issueStatus', i.status)}</td>
         <td>${canCs() && i.status !== 'RESOLVED' ? `<div class="actions">
             ${i.status === 'OPEN' ? `<button class="btn btn-sm" onclick="issueStatus(${i.id},'PROCESSING')">受理</button>` : ''}
             <button class="btn btn-ok btn-sm" onclick="issueResolve(${i.id})">办结</button></div>` : (i.handler ? esc(i.handler) : '')}</td>
@@ -599,22 +599,22 @@ async function renderSupport() {
     <div class="grid-2">
         <div class="panel"><h3>应急送水点 ${canCs() ? `<button class="btn btn-sm btn-primary" onclick="showWpAdd()">＋</button>` : ''}</h3>
             ${!wps.length ? '<div class="empty">暂无</div>' : `<table><thead><tr><th>名称</th><th>位置</th><th>排队</th><th>状态</th><th>操作</th></tr></thead><tbody>
-            ${wps.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.location)}</td><td>${p.queueLength} 人</td><td>${badge(p.status)}</td>
+            ${wps.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.location)}</td><td>${p.queueLength} 人</td><td>${badge('waterPointStatus', p.status)}</td>
             <td>${canCs() ? `<button class="btn btn-sm" onclick="showWpUpdate(${p.id},${p.queueLength},'${p.status}')">更新</button>` : ''}</td></tr>`).join('')}
             </tbody></table>`}</div>
         <div class="panel"><h3>老人/特殊用户送水 ${canCs() ? `<button class="btn btn-sm btn-primary" onclick="showElderAdd()">＋</button>` : ''}</h3>
             ${!elders.length ? '<div class="empty">暂无</div>' : `<table><thead><tr><th>姓名</th><th>地址</th><th>送水人</th><th>状态</th><th>操作</th></tr></thead><tbody>
-            ${elders.map(x => `<tr><td>${esc(x.elderName)}</td><td>${esc(x.address)}</td><td>${esc(x.deliverer) || '-'}</td><td>${badge(x.status)}</td>
+            ${elders.map(x => `<tr><td>${esc(x.elderName)}</td><td>${esc(x.address)}</td><td>${esc(x.deliverer) || '-'}</td><td>${badge('aidStatus', x.status)}</td>
             <td>${canCs() && x.status !== 'DONE' ? `<button class="btn btn-sm" onclick="elderNext(${x.id},'${x.status}')">${x.status === 'PENDING' ? '开始送水' : '送达'}</button>` : ''}</td></tr>`).join('')}
             </tbody></table>`}</div>
         <div class="panel"><h3>商户停业损失 ${canCs() ? `<button class="btn btn-sm btn-primary" onclick="showLossAdd()">＋</button>` : ''}</h3>
             ${!losses.length ? '<div class="empty">暂无</div>' : `<table><thead><tr><th>商户</th><th>类别</th><th>申报金额</th><th>状态</th><th>操作</th></tr></thead><tbody>
-            ${losses.map(x => `<tr><td>${esc(x.merchantName)}</td><td>${esc(x.category) || '-'}</td><td>${x.lossAmount != null ? '¥' + x.lossAmount : '-'}</td><td>${badge(x.status)}</td>
+            ${losses.map(x => `<tr><td>${esc(x.merchantName)}</td><td>${esc(x.category) || '-'}</td><td>${x.lossAmount != null ? '¥' + x.lossAmount : '-'}</td><td>${badge('lossStatus', x.status)}</td>
             <td>${canCs() && x.status !== 'SETTLED' ? `<button class="btn btn-sm" onclick="lossNext(${x.id},'${x.status}')">${x.status === 'REPORTED' ? '受理审核' : '完成赔付'}</button>` : ''}</td></tr>`).join('')}
             </tbody></table>`}</div>
         <div class="panel"><h3>二次供水水箱 ${canCs() ? `<button class="btn btn-sm btn-primary" onclick="showTankAdd()">＋</button>` : ''}</h3>
             ${!tanks.length ? '<div class="empty">暂无</div>' : `<table><thead><tr><th>小区</th><th>楼栋/水箱</th><th>水位</th><th>状态</th><th>检查人</th><th>操作</th></tr></thead><tbody>
-            ${tanks.map(x => `<tr><td>${esc(x.community)}</td><td>${esc(x.building)}</td><td>${x.levelPercent}%</td><td>${badge(x.status)}</td><td>${esc(x.checkedBy) || '-'}</td>
+            ${tanks.map(x => `<tr><td>${esc(x.community)}</td><td>${esc(x.building)}</td><td>${x.levelPercent}%</td><td>${badge('tankStatus', x.status)}</td><td>${esc(x.checkedBy) || '-'}</td>
             <td>${canCs() ? `<button class="btn btn-sm" onclick="showTankUpdate(${x.id},${x.levelPercent},'${x.status}')">更新</button>` : ''}</td></tr>`).join('')}
             </tbody></table>`}</div>
     </div>`;
@@ -736,7 +736,7 @@ async function renderYellowWater() {
     </div>
     <div class="panel"><h3>重点水质观察小区 <span class="tag">反复投诉自动进入</span></h3>
         ${!watch.length ? '<div class="empty">暂无</div>' : `<table><thead><tr><th>小区</th><th>累计投诉</th><th>状态</th><th>备注</th><th>操作</th></tr></thead><tbody>
-        ${watch.map(w => `<tr><td>${esc(w.community)}</td><td>${w.complaintCount} 次</td><td>${badge(w.status)}</td><td>${esc(w.note) || '-'}</td>
+        ${watch.map(w => `<tr><td>${esc(w.community)}</td><td>${w.complaintCount} 次</td><td>${badge('watchStatus', w.status)}</td><td>${esc(w.note) || '-'}</td>
         <td>${canOps() && w.status === 'WATCHING' ? `<button class="btn btn-ok btn-sm" onclick="clearWatch(${w.id})">解除观察</button>` : ''}</td></tr>`).join('')}
         </tbody></table>`}</div>
     <div class="panel"><h3>黄水/异味投诉处理单</h3>
@@ -746,14 +746,14 @@ async function renderYellowWater() {
         <td>${fmt(c.createdAt)}</td><td>${esc(c.order.orderNo)}</td>
         <td>${esc(c.community)}${c.building ? ' ' + esc(c.building) : ''}${c.floors ? '<br>' + c.floors + '层' + (c.highRise ? '(高层)' : '') : ''}
             ${c.propertyInspectAdvised ? '<br><span class="badge CROWDED">已提示物业查二供</span>' : ''}</td>
-        <td>${esc(label(c.complaintType))}</td>
+        <td>${esc(label('complaintType', c.complaintType))}</td>
         <td style="max-width:200px">${esc(c.description) || '-'}${c.photoUrls ? '<br>📷 ' + esc(c.photoUrls) : ''}</td>
         <td style="max-width:180px">${esc(c.flushRecord) || '-'}</td>
         <td>${esc(c.samplePoint) || '-'}</td>
-        <td style="max-width:200px">${c.method ? esc(label(c.method)) + '<br>' + esc(c.handlingNote || '') : '-'}
+        <td style="max-width:200px">${c.method ? esc(label('ywMethod', c.method)) + '<br>' + esc(c.handlingNote || '') : '-'}
             ${c.recovered !== null ? '<br>回访：' + (c.recovered ? '✅已恢复正常' : '❌未恢复') + (c.recoveredNote ? ' ' + esc(c.recoveredNote) : '') : ''}</td>
-        <td>${badge(c.responsibility)}</td>
-        <td>${badge(c.status)}</td>
+        <td>${badge('responsibility', c.responsibility)}</td>
+        <td>${badge('ywStatus', c.status)}</td>
         <td><div class="actions">
             ${canCs() && c.status === 'OPEN' ? `<button class="btn btn-primary btn-sm" onclick="showYwHandle(${c.id})">处理</button>` : ''}
             ${canCs() && c.status === 'FOLLOW_UP' ? `<button class="btn btn-ok btn-sm" onclick="showYwRecovery(${c.id})">回访采集</button>` : ''}
@@ -771,12 +771,12 @@ async function showYwCreate() {
         <label>投诉类型<select name="complaintType">${tOpts}</select></label>
         <label>小区 *<input name="community" required placeholder="如 老街社区"></label>
         <label>楼栋<input name="building" placeholder="如 5栋"></label>
-        <label>楼层数（≥7层为高层）<input name="floors" type="number" min="1" max="99"></label>
+        <label>楼层数（楼栋高度，≥7层为高层）*<input name="floors" type="number" min="1" max="99" required></label>
         <label>报修人<input name="reporterName"></label>
         <label>联系电话<input name="reporterPhone"></label>
         <label class="full">问题描述<textarea name="description" placeholder="黄水/异味情况"></textarea></label>
-        <label>水质检测点<input name="samplePoint" placeholder="如 3栋2单元801厨房水龙头"></label>
-        <label>居民照片URL<input name="photoUrls" placeholder="多个以逗号分隔"></label>
+        <label>水质检测点 *<input name="samplePoint" required placeholder="如 3栋2单元801厨房水龙头"></label>
+        <label>居民照片URL *<input name="photoUrls" required placeholder="多个以逗号分隔"></label>
     </form>
     <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
         <button class="btn btn-primary" onclick="submitYwCreate()">登记</button></div>`);
@@ -784,8 +784,11 @@ async function showYwCreate() {
 async function submitYwCreate() {
     const d = formData('f');
     if (!d.community) { toast('请填写小区', true); return; }
+    if (!d.floors) { toast('请填写楼栋高度（楼层数）', true); return; }
+    if (!d.samplePoint) { toast('请填写水质检测点', true); return; }
+    if (!d.photoUrls) { toast('请填写居民照片URL', true); return; }
     d.orderId = Number(d.orderId);
-    d.floors = d.floors ? Number(d.floors) : null;
+    d.floors = Number(d.floors);
     await run(() => post('/api/yellow-water', d), '投诉已登记并关联冲洗记录');
 }
 
@@ -856,7 +859,7 @@ function hsActions(s) {
 function hsCard(s) {
     return `<div class="panel" style="background:#fbfdff">
         <div class="kv">
-            <div><b>医院</b>${esc(s.hospitalName)} ${badge(s.status)}</div>
+            <div><b>医院</b>${esc(s.hospitalName)} ${badge('hospitalSupportStatus', s.status)}</div>
             <div><b>优先需求</b>${hsNeeds(s)}</div>
             <div><b>后勤联系</b>${esc(s.logisticsContact) || '-'} ${esc(s.logisticsPhone) || ''}</div>
             <div><b>供水车</b>${esc(s.waterTrucks) || '待调度'}</div>
@@ -886,7 +889,7 @@ async function renderHospital() {
             <td>${esc(s.hospitalName)}${s.truckAccessIssue ? '<br><span class="badge CROWDED">车辆改设水点</span>' : ''}</td>
             <td>${hsNeeds(s)}</td>
             <td>${esc(s.waterTrucks) || '待调度'}${s.tempTanks ? '<br>' + esc(s.tempTanks) : ''}</td>
-            <td>${badge(s.status)}${s.status === 'CONFIRMED' ? '<br><span class="badge CONFIRMED">医疗用水保障完成</span>' : ''}</td>
+            <td>${badge('hospitalSupportStatus', s.status)}${s.status === 'CONFIRMED' ? '<br><span class="badge CONFIRMED">医疗用水保障完成</span>' : ''}</td>
             <td>${fmt(s.arrivedAt)}${s.waterAmountM3 != null ? '<br>' + s.waterAmountM3 + ' m³' : ''}</td>
             <td>${fmt(s.restoreTime)}</td>
             <td>${esc(s.hospitalConfirmer) || '-'}</td>
@@ -1010,7 +1013,7 @@ async function renderBase() {
     <div class="panel"><h3>历史管线资料</h3><table><thead><tr><th>管段编号</th><th>分区</th><th>管径</th><th>材质</th><th>敷设年份</th><th>道路</th></tr></thead><tbody>
         ${PIPES.map(p => `<tr><td>${esc(p.code)}</td><td>${esc(p.zone.name)}</td><td>DN${p.diameterMm}</td><td>${esc(p.material)}</td><td>${p.installYear}</td><td>${esc(p.roadName)}</td></tr>`).join('')}</tbody></table></div>
     <div class="panel"><h3>重点设施（小区 / 医院 / 学校 / 餐饮街 / 道路）</h3><table><thead><tr><th>名称</th><th>类型</th><th>分区</th><th>人口</th><th>高层</th><th>联系人</th><th>备注</th></tr></thead><tbody>
-        ${FACILITIES.map(f => `<tr><td>${esc(f.name)}</td><td>${esc(label(f.type))}</td><td>${esc(f.zone.name)}</td><td>${f.population}</td>
+        ${FACILITIES.map(f => `<tr><td>${esc(f.name)}</td><td>${esc(label('facilityType', f.type))}</td><td>${esc(f.zone.name)}</td><td>${f.population}</td>
         <td>${f.highRise ? '是' : '否'}</td><td>${esc(f.contactName) || '-'} ${esc(f.contactPhone) || ''}</td><td>${esc(f.note) || '-'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 

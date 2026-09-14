@@ -196,7 +196,7 @@ public class DataSeeder implements ApplicationRunner {
         yellowWaterService.create(new YellowWaterCreateReq(
                 o3.getId(), ComplaintType.ODOR, "老街社区", "6栋", 18,
                 "吴女士", "13866660006", "自来水有异味，疑似二次供水水箱污染",
-                "6栋1202厨房水龙头", null, null));
+                "6栋1202厨房水龙头", "https://img.example.com/yw/6-1202-1.jpg", null));
     }
 
     private ValveZone zone(String code, String name, String desc) {

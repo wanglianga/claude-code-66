@@ -55,6 +55,13 @@ public class YellowWaterService {
 
     @Transactional
     public YellowWaterCase create(YellowWaterCreateReq req) {
+        // 关联资料门禁：水质检测点、楼栋高度、居民照片缺一不可（接口层 @Valid 之外的防御）
+        if (req.samplePoint() == null || req.samplePoint().isBlank()
+                || req.floors() == null
+                || req.photoUrls() == null || req.photoUrls().isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST,
+                    "缺少关联资料：水质检测点、楼栋高度、居民照片均为必填");
+        }
         RepairOrder o = orderRepo.findById(req.orderId())
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "工单不存在: " + req.orderId()));
         EventStatus es = o.getEvent().getStatus();
