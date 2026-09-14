@@ -76,6 +76,15 @@ tr:hover td { background: #f8fbff; }
 .badge.MANUAL { background: #f3e8ff; color: #7e22ce; }
 .badge.SUPPLIED { background: #dbeafe; color: #1d4ed8; }
 .badge.CONFIRMED { background: #d1fae5; color: #047857; }
+.badge.FOLLOW_UP { background: #fef3c7; color: #b45309; }
+.badge.WATCHING { background: #fee2e2; color: #b91c1c; }
+.badge.CLEARED { background: #d1fae5; color: #047857; }
+.badge.SECOND_FLUSH { background: #dbeafe; color: #1d4ed8; }
+.badge.DOOR_SAMPLE { background: #f3e8ff; color: #7e22ce; }
+.badge.EXPLAIN_DISCHARGE { background: #ccfbf1; color: #0f766e; }
+.badge.WATER_COMPANY { background: #dbeafe; color: #1d4ed8; }
+.badge.PROPERTY { background: #ffedd5; color: #c2410c; }
+.badge.UNDETERMINED { background: #e5e7eb; color: #4b5563; }
 
 /* ---------- 按钮 ---------- */
 .btn { display: inline-block; border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; text-decoration: none; }

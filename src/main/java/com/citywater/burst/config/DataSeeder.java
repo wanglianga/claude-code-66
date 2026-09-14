@@ -8,6 +8,7 @@ import com.citywater.burst.service.HospitalSupportService;
 import com.citywater.burst.service.IssueService;
 import com.citywater.burst.service.RepairService;
 import com.citywater.burst.service.SupportService;
+import com.citywater.burst.service.YellowWaterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -43,6 +44,7 @@ public class DataSeeder implements ApplicationRunner {
     private final IssueService issueService;
     private final SupportService supportService;
     private final HospitalSupportService hospitalSupportService;
+    private final YellowWaterService yellowWaterService;
 
     @Value("${app.seed-demo-data:true}")
     private boolean seedDemoData;
@@ -178,6 +180,23 @@ public class DataSeeder implements ApplicationRunner {
         repairService.confirmRestore(o3.getId());
         issueService.create(new IssueCreateReq(o3.getId(), IssueType.YELLOW_WATER,
                 "老街社区3栋居民反映复供后水龙头出黄水", "居民-陈阿姨", "13844440004"));
+
+        // 复供黄水投诉处理（E3 老街社区）：1 件已办结，2 件高层集中投诉触发物业提示与重点观察
+        YellowWaterCase yw1 = yellowWaterService.create(new YellowWaterCreateReq(
+                o3.getId(), ComplaintType.YELLOW_WATER, "老街社区", "3栋2单元", 6,
+                "陈阿姨", "13844440004", "复供后早上水龙头出黄水，约2分钟后变清",
+                "3栋2单元601厨房水龙头", "https://img.example.com/yw/3-601-1.jpg", null));
+        yellowWaterService.handle(yw1.getId(), new YellowWaterHandleReq(
+                YwMethod.EXPLAIN_DISCHARGE, "管网残留所致，指导居民短时排放后水已清澈，电话回访确认",
+                Responsibility.WATER_COMPANY, null));
+        yellowWaterService.create(new YellowWaterCreateReq(
+                o3.getId(), ComplaintType.YELLOW_WATER, "老街社区", "5栋", 18,
+                "周先生", "13855550005", "高层住户持续黄水，放水半小时仍发黄",
+                "5栋1503厨房水龙头", "https://img.example.com/yw/5-1503-1.jpg,https://img.example.com/yw/5-1503-2.jpg", null));
+        yellowWaterService.create(new YellowWaterCreateReq(
+                o3.getId(), ComplaintType.ODOR, "老街社区", "6栋", 18,
+                "吴女士", "13866660006", "自来水有异味，疑似二次供水水箱污染",
+                "6栋1202厨房水龙头", null, null));
     }
 
     private ValveZone zone(String code, String name, String desc) {

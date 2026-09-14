@@ -91,6 +91,7 @@ const TABS = [
     ['orders', '工单与复供'],
     ['notifications', '客服通知'],
     ['issues', '复供后问题'],
+    ['yellowwater', '黄水处理'],
     ['hospital', '医疗保障'],
     ['support', '停水保障'],
     ['base', '基础资料'],
@@ -116,8 +117,8 @@ function switchTab(tab) {
 
 function render() {
     const fn = { dashboard: renderDashboard, events: renderEvents, orders: renderOrders,
-        notifications: renderNotifications, issues: renderIssues, hospital: renderHospital,
-        support: renderSupport, base: renderBase }[CURRENT_TAB];
+        notifications: renderNotifications, issues: renderIssues, yellowwater: renderYellowWater,
+        hospital: renderHospital, support: renderSupport, base: renderBase }[CURRENT_TAB];
     fn();
 }
 
@@ -136,7 +137,10 @@ async function renderDashboard() {
         <div class="stat-card"><div class="num ${s.pendingDeliveries > 0 ? 'warn' : ''}">${s.pendingDeliveries}</div><div class="lbl">待送水老人</div></div>
         <div class="stat-card"><div class="num ${s.abnormalTanks > 0 ? 'danger' : ''}">${s.abnormalTanks}</div><div class="lbl">异常二供水箱</div></div>
         <div class="stat-card"><div class="num ${d.hospitalSupportActive > 0 ? 'warn' : ''}">${d.hospitalSupportActive}</div><div class="lbl">医疗保障待确认</div></div>
+        <div class="stat-card"><div class="num ${d.yellowWaterOpen > 0 ? 'warn' : ''}">${d.yellowWaterOpen}</div><div class="lbl">黄水投诉待处理</div></div>
+        <div class="stat-card"><div class="num ${d.watchCommunities > 0 ? 'danger' : ''}">${d.watchCommunities}</div><div class="lbl">重点水质观察小区</div></div>
     </div>
+    ${d.watchList && d.watchList.length ? `<div class="notice danger">⚠️ 重点水质观察：${d.watchList.map(w => esc(w.community) + '（投诉' + w.complaintCount + '次）').join('、')}</div>` : ''}
     ${d.hospitalSupportActive > 0 ? `<div class="notice">🚑 医疗用水保障进行中：${d.hospitalSupports.filter(x => x.status !== 'CONFIRMED').map(x => esc(x.hospitalName) + '（' + label(x.status) + '）').join('、')}。医院确认后客服端将显示「医疗用水保障完成」，无需重复催问抢修队。</div>` : (d.hospitalSupports.length ? '<div class="notice" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">✅ 医疗用水保障完成，各医院用水已由医院方确认。</div>' : '')}
     ${d.longOutageEvents.length ? `<div class="notice danger">⚠️ 长时停水预警：${d.longOutageEvents.map(e => esc(e.eventNo + ' ' + e.location)).join('；')}，请关注临时水点、老人送水与二次供水水箱。</div>` : ''}
     <div class="grid-2">
@@ -326,6 +330,8 @@ function orderBlock(od) {
         ${od.issues.length ? `<table style="margin-top:6px"><thead><tr><th>复供后问题</th><th>类型</th><th>状态</th><th>时间</th></tr></thead><tbody>
             ${od.issues.map(i => `<tr><td>${esc(i.description)}</td><td>${esc(label(i.type))}</td><td>${badge(i.status)}</td><td>${fmt(i.createdAt)}</td></tr>`).join('')}
         </tbody></table>` : ''}
+        ${od.yellowWaterCases && od.yellowWaterCases.length ? `<div class="muted" style="margin-top:6px">黄水/异味投诉 ${od.yellowWaterCases.length} 件：${od.yellowWaterCases.map(y => esc(y.community) + (y.building || '') + '[' + label(y.complaintType) + '/' + label(y.status) + (y.responsibility && y.responsibility !== 'UNDETERMINED' ? '/' + label(y.responsibility) : '') + ']').join('、')}</div>` : ''}
+        ${od.yellowWaterCases && od.yellowWaterCases.length ? `<div class="muted" style="margin-top:6px">黄水/异味投诉 ${od.yellowWaterCases.length} 件：${od.yellowWaterCases.map(y => esc(y.community) + (y.building || '') + '[' + label(y.status) + (y.propertyInspectAdvised ? '·已提示物业' : '') + ']').join('、')}（在「黄水处理」页签处理）</div>` : ''}
     </div>`;
 }
 
@@ -718,6 +724,108 @@ function showTankUpdate(id, level, status) {
 async function submitTankUpdate(id) {
     const d = formData('f'); d.levelPercent = Number(d.levelPercent || 0);
     await run(() => post('/api/support/tanks/' + id, d), '已更新');
+}
+
+/* ---------------- 复供黄水投诉处理 ---------------- */
+async function renderYellowWater() {
+    const [cases, watch] = await Promise.all([api('/api/yellow-water'), api('/api/yellow-water/watch')]);
+    $('#main').innerHTML = `
+    <div class="toolbar">
+        <div class="muted">关联冲洗记录 / 检测点 / 楼栋高度 / 居民照片；处理结论回写复供质量档案；二次冲洗后需回访采集。</div>
+        ${canCs() ? '<button class="btn btn-primary" onclick="showYwCreate()">＋ 登记黄水/异味投诉</button>' : ''}
+    </div>
+    <div class="panel"><h3>重点水质观察小区 <span class="tag">反复投诉自动进入</span></h3>
+        ${!watch.length ? '<div class="empty">暂无</div>' : `<table><thead><tr><th>小区</th><th>累计投诉</th><th>状态</th><th>备注</th><th>操作</th></tr></thead><tbody>
+        ${watch.map(w => `<tr><td>${esc(w.community)}</td><td>${w.complaintCount} 次</td><td>${badge(w.status)}</td><td>${esc(w.note) || '-'}</td>
+        <td>${canOps() && w.status === 'WATCHING' ? `<button class="btn btn-ok btn-sm" onclick="clearWatch(${w.id})">解除观察</button>` : ''}</td></tr>`).join('')}
+        </tbody></table>`}</div>
+    <div class="panel"><h3>黄水/异味投诉处理单</h3>
+        ${!cases.length ? '<div class="empty">暂无投诉</div>' : `<table><thead><tr>
+        <th>时间</th><th>工单</th><th>小区/楼栋</th><th>类型</th><th>描述/照片</th><th>冲洗记录</th><th>检测点</th><th>处理</th><th>责任方</th><th>状态</th><th>操作</th>
+        </tr></thead><tbody>${cases.map(c => `<tr>
+        <td>${fmt(c.createdAt)}</td><td>${esc(c.order.orderNo)}</td>
+        <td>${esc(c.community)}${c.building ? ' ' + esc(c.building) : ''}${c.floors ? '<br>' + c.floors + '层' + (c.highRise ? '(高层)' : '') : ''}
+            ${c.propertyInspectAdvised ? '<br><span class="badge CROWDED">已提示物业查二供</span>' : ''}</td>
+        <td>${esc(label(c.complaintType))}</td>
+        <td style="max-width:200px">${esc(c.description) || '-'}${c.photoUrls ? '<br>📷 ' + esc(c.photoUrls) : ''}</td>
+        <td style="max-width:180px">${esc(c.flushRecord) || '-'}</td>
+        <td>${esc(c.samplePoint) || '-'}</td>
+        <td style="max-width:200px">${c.method ? esc(label(c.method)) + '<br>' + esc(c.handlingNote || '') : '-'}
+            ${c.recovered !== null ? '<br>回访：' + (c.recovered ? '✅已恢复正常' : '❌未恢复') + (c.recoveredNote ? ' ' + esc(c.recoveredNote) : '') : ''}</td>
+        <td>${badge(c.responsibility)}</td>
+        <td>${badge(c.status)}</td>
+        <td><div class="actions">
+            ${canCs() && c.status === 'OPEN' ? `<button class="btn btn-primary btn-sm" onclick="showYwHandle(${c.id})">处理</button>` : ''}
+            ${canCs() && c.status === 'FOLLOW_UP' ? `<button class="btn btn-ok btn-sm" onclick="showYwRecovery(${c.id})">回访采集</button>` : ''}
+        </div></td></tr>`).join('')}</tbody></table>`}</div>`;
+}
+
+async function showYwCreate() {
+    const orders = (await api('/api/orders')).filter(o => ['RESTORED', 'CLOSED'].includes(o.event.status));
+    if (!orders.length) { toast('暂无已复供的工单', true); return; }
+    const oOpts = orders.map(o => `<option value="${o.id}">${esc(o.orderNo)} ${esc(o.event.location)}</option>`).join('');
+    const tOpts = Object.entries(ENUMS.complaintType).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    openModal('登记黄水/异味投诉', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label class="full">原抢修工单<select name="orderId">${oOpts}</select></label>
+        <label>投诉类型<select name="complaintType">${tOpts}</select></label>
+        <label>小区 *<input name="community" required placeholder="如 老街社区"></label>
+        <label>楼栋<input name="building" placeholder="如 5栋"></label>
+        <label>楼层数（≥7层为高层）<input name="floors" type="number" min="1" max="99"></label>
+        <label>报修人<input name="reporterName"></label>
+        <label>联系电话<input name="reporterPhone"></label>
+        <label class="full">问题描述<textarea name="description" placeholder="黄水/异味情况"></textarea></label>
+        <label>水质检测点<input name="samplePoint" placeholder="如 3栋2单元801厨房水龙头"></label>
+        <label>居民照片URL<input name="photoUrls" placeholder="多个以逗号分隔"></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitYwCreate()">登记</button></div>`);
+}
+async function submitYwCreate() {
+    const d = formData('f');
+    if (!d.community) { toast('请填写小区', true); return; }
+    d.orderId = Number(d.orderId);
+    d.floors = d.floors ? Number(d.floors) : null;
+    await run(() => post('/api/yellow-water', d), '投诉已登记并关联冲洗记录');
+}
+
+function showYwHandle(id) {
+    const mOpts = Object.entries(ENUMS.ywMethod).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    const rOpts = Object.entries(ENUMS.responsibility).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    openModal('客服处理（结论回写复供质量档案）', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label>处理方式<select name="method">${mOpts}</select></label>
+        <label>责任方<select name="responsibility">${rOpts}</select></label>
+        <label class="full">水质检测点<input name="samplePoint" placeholder="可更新检测点"></label>
+        <label class="full">处理说明与结论 *<textarea name="note" required placeholder="如 管网残留所致，指导短时排放；或 已安排二次冲洗"></textarea></label>
+    </form>
+    <div class="notice">选择「二次冲洗」后需回访采集用户是否恢复正常用水；其余方式直接办结。</div>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitYwHandle(${id})">提交处理</button></div>`);
+}
+async function submitYwHandle(id) {
+    const d = formData('f');
+    if (!d.note) { toast('请填写处理说明', true); return; }
+    await run(() => post(`/api/yellow-water/${id}/handle`, d), '处理完成，结论已回写复供质量档案');
+}
+
+function showYwRecovery(id) {
+    openModal('二次冲洗后回访采集', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label>用户是否恢复正常用水<select name="recovered"><option value="true">已恢复正常</option><option value="false">仍未恢复</option></select></label>
+        <label class="full">回访说明<textarea name="note" placeholder="如 放水1分钟后清澈，用户确认正常"></textarea></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-ok" onclick="submitYwRecovery(${id})">提交回访</button></div>`);
+}
+async function submitYwRecovery(id) {
+    const d = formData('f');
+    d.recovered = d.recovered === 'true';
+    await run(() => post(`/api/yellow-water/${id}/recovery`, d), '回访结果已记录');
+}
+
+async function clearWatch(id) {
+    await run(() => post(`/api/yellow-water/watch/${id}/clear`, { note: '水质持续合格，解除重点观察' }), '已解除重点观察');
 }
 
 /* ---------------- 医院应急供水保障 ---------------- */

@@ -48,7 +48,8 @@ public class RestorationCheck {
     @Column(length = 64)
     private String qualityInspector;
 
-    @Column(length = 512)
+    /** 复供质量档案备注：黄水投诉处理结论也会回写到此处 */
+    @Column(length = 2000)
     private String note;
 
     @Column(length = 64)

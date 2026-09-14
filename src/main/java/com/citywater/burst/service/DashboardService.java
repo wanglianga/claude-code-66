@@ -26,6 +26,8 @@ public class DashboardService {
     private final MerchantLossRepo lossRepo;
     private final SecondaryTankRepo tankRepo;
     private final HospitalSupportRepo hospitalSupportRepo;
+    private final YellowWaterCaseRepo yellowWaterCaseRepo;
+    private final WaterQualityWatchRepo watchRepo;
 
     private static final List<EventStatus> ACTIVE = List.of(
             EventStatus.REPORTED, EventStatus.ASSESSED, EventStatus.DISPATCHED,
@@ -73,6 +75,12 @@ public class DashboardService {
         m.put("hospitalSupportActive",
                 hospitalSupports.stream().filter(s -> s.getStatus() != HospitalSupportStatus.CONFIRMED).count());
         m.put("hospitalSupports", hospitalSupports);
+
+        // 黄水投诉与重点水质观察
+        m.put("yellowWaterOpen", yellowWaterCaseRepo.countByStatusNot(YwStatus.DONE));
+        m.put("watchCommunities", watchRepo.countByStatus(WatchStatus.WATCHING));
+        m.put("watchList", watchRepo.findAllByOrderByUpdatedAtDesc().stream()
+                .filter(w -> w.getStatus() == WatchStatus.WATCHING).toList());
         return m;
     }
 }

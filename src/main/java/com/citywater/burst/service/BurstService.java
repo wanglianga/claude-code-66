@@ -43,6 +43,7 @@ public class BurstService {
     private final MerchantLossRepo lossRepo;
     private final SecondaryTankRepo tankRepo;
     private final HospitalSupportRepo hospitalSupportRepo;
+    private final YellowWaterCaseRepo yellowWaterCaseRepo;
     private final CurrentUser currentUser;
 
     public List<BurstEvent> list(EventStatus status) {
@@ -188,7 +189,8 @@ public class BurstService {
                         o,
                         logRepo.findByOrderIdOrderByCreatedAtAsc(o.getId()),
                         checkRepo.findByOrderId(o.getId()).orElse(null),
-                        issueRepo.findByOrderIdOrderByCreatedAtDesc(o.getId())))
+                        issueRepo.findByOrderIdOrderByCreatedAtDesc(o.getId()),
+                        yellowWaterCaseRepo.findByOrderIdOrderByCreatedAtDesc(o.getId())))
                 .toList();
         return new EventDetail(
                 e,

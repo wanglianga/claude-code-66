@@ -124,6 +124,30 @@ public final class Requests {
 
     public record ReviewReq(@NotBlank String reviewNote) {}
 
+    /** 复供黄水投诉处理 */
+    public record YellowWaterCreateReq(
+            @NotNull Long orderId,
+            @NotNull ComplaintType complaintType,
+            @NotBlank String community,
+            String building,
+            Integer floors,
+            String reporterName,
+            String reporterPhone,
+            String description,
+            String samplePoint,
+            String photoUrls,
+            Long issueId) {}
+
+    public record YellowWaterHandleReq(
+            @NotNull YwMethod method,
+            @NotBlank String note,
+            Responsibility responsibility,
+            String samplePoint) {}
+
+    public record YellowWaterRecoveryReq(@NotNull Boolean recovered, String note) {}
+
+    public record WatchClearReq(String note) {}
+
     /** 事件完整详情：评估 + 工单(进度/复供单/复供后问题) + 通知 + 停水保障 + 医疗保障 */
     public record EventDetail(
             BurstEvent event,
@@ -140,5 +164,6 @@ public final class Requests {
             RepairOrder order,
             List<ProgressLog> logs,
             RestorationCheck check,
-            List<PostRestoreIssue> issues) {}
+            List<PostRestoreIssue> issues,
+            List<YellowWaterCase> yellowWaterCases) {}
 }
