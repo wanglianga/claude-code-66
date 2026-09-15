@@ -148,6 +148,27 @@ public final class Requests {
 
     public record WatchClearReq(String note) {}
 
+    /** 道路恢复验收 */
+    public record RoadSubmitReq(
+            @NotNull Boolean backfillDone,
+            @NotNull Boolean barrierRemoved,
+            @NotNull Boolean trafficRestored,
+            @NotBlank String photoUrls,
+            @NotBlank String constructionCrew,
+            @NotBlank String materialBatch) {}
+
+    public record RoadAcceptReq(@NotBlank String confirmer, @NotNull ConfirmerRole confirmerRole) {}
+
+    public record RoadRejectReq(@NotBlank String confirmer, @NotNull ConfirmerRole confirmerRole,
+                                @NotBlank String reason) {}
+
+    public record SubsidenceCreateReq(
+            @NotNull Long roadId,
+            @NotBlank String description,
+            @NotNull java.time.LocalDate recheckDate) {}
+
+    public record RecheckReq(@NotBlank String result) {}
+
     /** 事件完整详情：评估 + 工单(进度/复供单/复供后问题) + 通知 + 停水保障 + 医疗保障 */
     public record EventDetail(
             BurstEvent event,
@@ -165,5 +186,7 @@ public final class Requests {
             List<ProgressLog> logs,
             RestorationCheck check,
             List<PostRestoreIssue> issues,
-            List<YellowWaterCase> yellowWaterCases) {}
+            List<YellowWaterCase> yellowWaterCases,
+            RoadRestoration road,
+            List<SubsidenceReport> subsidenceReports) {}
 }

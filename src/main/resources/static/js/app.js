@@ -93,6 +93,7 @@ const TABS = [
     ['notifications', '客服通知'],
     ['issues', '复供后问题'],
     ['yellowwater', '黄水处理'],
+    ['road', '道路验收'],
     ['hospital', '医疗保障'],
     ['support', '停水保障'],
     ['base', '基础资料'],
@@ -119,7 +120,7 @@ function switchTab(tab) {
 function render() {
     const fn = { dashboard: renderDashboard, events: renderEvents, orders: renderOrders,
         notifications: renderNotifications, issues: renderIssues, yellowwater: renderYellowWater,
-        hospital: renderHospital, support: renderSupport, base: renderBase }[CURRENT_TAB];
+        road: renderRoad, hospital: renderHospital, support: renderSupport, base: renderBase }[CURRENT_TAB];
     fn();
 }
 
@@ -140,6 +141,8 @@ async function renderDashboard() {
         <div class="stat-card"><div class="num ${d.hospitalSupportActive > 0 ? 'warn' : ''}">${d.hospitalSupportActive}</div><div class="lbl">医疗保障待确认</div></div>
         <div class="stat-card"><div class="num ${d.yellowWaterOpen > 0 ? 'warn' : ''}">${d.yellowWaterOpen}</div><div class="lbl">黄水投诉待处理</div></div>
         <div class="stat-card"><div class="num ${d.watchCommunities > 0 ? 'danger' : ''}">${d.watchCommunities}</div><div class="lbl">重点水质观察小区</div></div>
+        <div class="stat-card"><div class="num ${d.roadAcceptancePending > 0 ? 'warn' : ''}">${d.roadAcceptancePending}</div><div class="lbl">道路验收待办</div></div>
+        <div class="stat-card"><div class="num ${d.subsidenceOpen > 0 ? 'danger' : ''}">${d.subsidenceOpen}</div><div class="lbl">沉降待复查</div></div>
     </div>
     ${d.watchList && d.watchList.length ? `<div class="notice danger">⚠️ 重点水质观察：${d.watchList.map(w => esc(w.community) + '（投诉' + w.complaintCount + '次）').join('、')}</div>` : ''}
     ${d.hospitalSupportActive > 0 ? `<div class="notice">🚑 医疗用水保障进行中：${d.hospitalSupports.filter(x => x.status !== 'CONFIRMED').map(x => esc(x.hospitalName) + '（' + label('hospitalSupportStatus', x.status) + '）').join('、')}。医院确认后客服端将显示「医疗用水保障完成」，无需重复催问抢修队。</div>` : (d.hospitalSupports.length ? '<div class="notice" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534">✅ 医疗用水保障完成，各医院用水已由医院方确认。</div>' : '')}
@@ -332,6 +335,13 @@ function orderBlock(od) {
             ${od.issues.map(i => `<tr><td>${esc(i.description)}</td><td>${esc(label('issueType', i.type))}</td><td>${badge('issueStatus', i.status)}</td><td>${fmt(i.createdAt)}</td></tr>`).join('')}
         </tbody></table>` : ''}
         ${od.yellowWaterCases && od.yellowWaterCases.length ? `<div class="muted" style="margin-top:6px">黄水/异味投诉 ${od.yellowWaterCases.length} 件：${od.yellowWaterCases.map(y => esc(y.community) + (y.building || '') + '[' + label('complaintType', y.complaintType) + '/' + label('ywStatus', y.status) + (y.responsibility && y.responsibility !== 'UNDETERMINED' ? '/' + label('responsibility', y.responsibility) : '') + ']').join('、')}</div>` : ''}
+        ${od.road ? `<div class="notice" style="margin-top:6px">道路恢复验收：${badge('roadStatus', od.road.status)}
+            回填${od.road.backfillDone ? '✅' : '⬜'} 围挡撤除${od.road.barrierRemoved ? '✅' : '⬜'} 交通恢复${od.road.trafficRestored ? '✅' : '⬜'}
+            ｜施工班组 ${esc(od.road.constructionCrew) || '-'}｜材料批次 ${esc(od.road.materialBatch) || '-'}｜恢复时间 ${fmt(od.road.restoredAt)}
+            ${od.road.confirmer ? '｜确认 ' + esc(od.road.confirmer) + '(' + label('confirmerRole', od.road.confirmerRole) + ')' : ''}
+            ${od.road.barrierMaintained ? '｜⚠️ 验收不通过，围挡和交通提示继续保持' : ''}
+            ${od.subsidenceReports && od.subsidenceReports.length ? '<br>沉降记录 ' + od.subsidenceReports.length + ' 条（复查日期 ' + od.subsidenceReports.map(s => s.recheckDate).join('、') + '）' : ''}
+        </div>` : ''}
     </div>`;
 }
 
@@ -829,6 +839,129 @@ async function submitYwRecovery(id) {
 
 async function clearWatch(id) {
     await run(() => post(`/api/yellow-water/watch/${id}/clear`, { note: '水质持续合格，解除重点观察' }), '已解除重点观察');
+}
+
+/* ---------------- 道路恢复验收 ---------------- */
+async function renderRoad() {
+    const [roads, subs] = await Promise.all([api('/api/road'), api('/api/road/subsidence')]);
+    $('#main').innerHTML = `
+    <div class="toolbar"><div class="muted">回填/围挡撤除/交通恢复/路面照片由现场负责人、城管或道路单位确认；验收不通过时围挡和交通提示继续保持，事件不能关闭。</div></div>
+    <div class="panel"><h3>道路恢复验收单</h3>
+        ${!roads.length ? '<div class="empty">暂无（工单进入道路恢复阶段自动创建）</div>' : `<table><thead><tr>
+        <th>工单</th><th>位置</th><th>回填/围挡/交通</th><th>路面照片</th><th>施工班组</th><th>材料批次</th><th>恢复时间</th><th>状态</th><th>确认</th><th>操作</th>
+        </tr></thead><tbody>${roads.map(r => `<tr>
+        <td>${esc(r.order.orderNo)}</td><td>${esc(r.order.event.location)}</td>
+        <td>回填${r.backfillDone ? '✅' : '⬜'} 围挡${r.barrierRemoved ? '✅' : '⬜'} 交通${r.trafficRestored ? '✅' : '⬜'}</td>
+        <td style="max-width:140px">${r.photoUrls ? '📷 ' + esc(r.photoUrls) : '-'}</td>
+        <td>${esc(r.constructionCrew) || '-'}</td><td>${esc(r.materialBatch) || '-'}</td><td>${fmt(r.restoredAt)}</td>
+        <td>${badge('roadStatus', r.status)}${r.barrierMaintained ? '<br><span class="badge CROWDED">围挡继续保持</span>' : ''}${r.rejectReason ? '<br><span class="muted">' + esc(r.rejectReason) + '</span>' : ''}</td>
+        <td>${r.confirmer ? esc(r.confirmer) + '<br>' + label('confirmerRole', r.confirmerRole) : '-'}</td>
+        <td><div class="actions">
+            ${canCrew() && (r.status === 'PENDING' || r.status === 'REJECTED') ? `<button class="btn btn-primary btn-sm" onclick="showRoadSubmit(${r.id})">提交验收</button>` : ''}
+            ${canOps() && r.status === 'SUBMITTED' ? `<button class="btn btn-ok btn-sm" onclick="showRoadAccept(${r.id})">验收通过</button><button class="btn btn-danger btn-sm" onclick="showRoadReject(${r.id})">不通过</button>` : ''}
+        </div></td></tr>`).join('')}</tbody></table>`}</div>
+    <div class="panel"><h3>沉降记录与复查 <span class="tag">周边商户/居民投诉自动关联；复查安排固定日期</span>
+        ${canCs() && roads.length ? '<button class="btn btn-sm btn-primary" onclick="showSubsidenceAdd()">＋ 手动登记沉降</button>' : ''}</h3>
+        ${!subs.length ? '<div class="empty">暂无沉降记录</div>' : `<table><thead><tr>
+        <th>登记时间</th><th>工单</th><th>描述</th><th>责任追溯（班组/批次/恢复时间）</th><th>复查日期</th><th>复查结果</th><th>状态</th><th>操作</th>
+        </tr></thead><tbody>${subs.map(s => `<tr>
+        <td>${fmt(s.reportDate)}</td><td>${esc(s.roadRestoration.order.orderNo)}${s.issue ? '<br><span class="muted">关联投诉#' + s.issue.id + '</span>' : ''}</td>
+        <td style="max-width:220px">${esc(s.description)}</td>
+        <td>${esc(s.roadRestoration.constructionCrew) || '-'} / ${esc(s.roadRestoration.materialBatch) || '-'} / ${fmt(s.roadRestoration.restoredAt)}</td>
+        <td>${esc(s.recheckDate)}</td>
+        <td style="max-width:180px">${esc(s.recheckResult) || '-'}</td>
+        <td>${badge('subsidenceStatus', s.status)}</td>
+        <td>${canOps() && s.status === 'OPEN' ? `<button class="btn btn-ok btn-sm" onclick="showRecheck(${s.id})">复查</button>` : ''}</td>
+        </tr>`).join('')}</tbody></table>`}</div>`;
+}
+
+function showRoadSubmit(id) {
+    openModal('提交道路验收材料', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <div class="full checks">
+            <label><input type="checkbox" name="backfillDone" checked> 道路回填完成</label>
+            <label><input type="checkbox" name="barrierRemoved" checked> 围挡撤除</label>
+            <label><input type="checkbox" name="trafficRestored" checked> 交通恢复</label>
+        </div>
+        <label class="full">路面照片URL *<input name="photoUrls" required placeholder="多个以逗号分隔"></label>
+        <label>施工班组 *<input name="constructionCrew" required placeholder="如 抢修二队-道路班组"></label>
+        <label>材料批次 *<input name="materialBatch" required placeholder="如 沥青批次AC-2026-0912"></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitRoadSubmit(${id})">提交验收</button></div>`);
+}
+async function submitRoadSubmit(id) {
+    const d = formData('f');
+    for (const k of ['backfillDone','barrierRemoved','trafficRestored']) d[k] = d[k] === 'on';
+    if (!d.photoUrls || !d.constructionCrew || !d.materialBatch) { toast('路面照片、施工班组、材料批次为必填', true); return; }
+    await run(() => post(`/api/road/${id}/submit`, d), '验收材料已提交');
+}
+
+function showRoadAccept(id) {
+    const rOpts = Object.entries(ENUMS.confirmerRole).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    openModal('道路验收通过确认', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label>确认人 *<input name="confirmer" required placeholder="姓名"></label>
+        <label>确认方<select name="confirmerRole">${rOpts}</select></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-ok" onclick="submitRoadAccept(${id})">验收通过</button></div>`);
+}
+async function submitRoadAccept(id) {
+    const d = formData('f');
+    if (!d.confirmer) { toast('请填写确认人', true); return; }
+    await run(() => post(`/api/road/${id}/accept`, d), '道路验收已通过');
+}
+
+function showRoadReject(id) {
+    const rOpts = Object.entries(ENUMS.confirmerRole).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    openModal('道路验收不通过', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label>确认人 *<input name="confirmer" required></label>
+        <label>确认方<select name="confirmerRole">${rOpts}</select></label>
+        <label class="full">不通过原因 *<textarea name="reason" required placeholder="如 回填压实度不足，需返工"></textarea></label>
+    </form>
+    <div class="notice">验收不通过时，围挡和交通提示继续保持，事件不能关闭。</div>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-danger" onclick="submitRoadReject(${id})">验收不通过</button></div>`);
+}
+async function submitRoadReject(id) {
+    const d = formData('f');
+    if (!d.confirmer || !d.reason) { toast('请填写确认人与原因', true); return; }
+    await run(() => post(`/api/road/${id}/reject`, d), '已记录验收不通过，围挡继续保持');
+}
+
+async function showSubsidenceAdd() {
+    const roads = await api('/api/road');
+    const rOpts = roads.map(r => `<option value="${r.id}">${esc(r.order.orderNo)} ${esc(r.order.event.location)}</option>`).join('');
+    openModal('手动登记沉降', `
+    <form id="f" class="form-grid" onsubmit="return false">
+        <label class="full">道路恢复记录<select name="roadId">${rOpts}</select></label>
+        <label class="full">沉降描述 *<textarea name="description" required></textarea></label>
+        <label>复查固定日期 *<input name="recheckDate" type="date" required></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="submitSubsidenceAdd()">登记</button></div>`);
+}
+async function submitSubsidenceAdd() {
+    const d = formData('f');
+    if (!d.description || !d.recheckDate) { toast('请填写沉降描述与复查日期', true); return; }
+    d.roadId = Number(d.roadId);
+    await run(() => post('/api/road/subsidence', d), '沉降已登记，复查日期已安排');
+}
+
+function showRecheck(id) {
+    openModal('沉降复查', `
+    <form id="f" onsubmit="return false">
+        <label style="display:block">复查结果 *<textarea name="result" rows="3" style="width:100%;margin-top:6px;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="如 现场复测沉降2mm，在允许范围内，继续观察"></textarea></label>
+    </form>
+    <div class="form-actions"><button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-ok" onclick="submitRecheck(${id})">提交复查</button></div>`);
+}
+async function submitRecheck(id) {
+    const d = formData('f');
+    if (!d.result) { toast('请填写复查结果', true); return; }
+    await run(() => post(`/api/road/subsidence/${id}/recheck`, d), '复查结果已记录');
 }
 
 /* ---------------- 医院应急供水保障 ---------------- */

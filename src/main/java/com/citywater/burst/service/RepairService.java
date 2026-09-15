@@ -33,6 +33,7 @@ public class RepairService {
     private final ImpactAssessmentRepo assessmentRepo;
     private final NotifyService notifyService;
     private final HospitalSupportService hospitalSupportService;
+    private final RoadService roadService;
     private final CurrentUser currentUser;
 
     public List<RepairOrder> listOrders() {
@@ -143,6 +144,11 @@ public class RepairService {
             e.setStatus(EventStatus.REPAIRING);
         }
         eventRepo.save(e);
+
+        // 进入道路恢复阶段：自动创建道路恢复验收单
+        if (stage == RepairStage.ROAD_RESTORED) {
+            roadService.createForOrder(o);
+        }
 
         // 通知内容随抢修进展变化
         notifyService.autoNotify(e, o, stage, currentUser.displayName());

@@ -44,6 +44,8 @@ public class BurstService {
     private final SecondaryTankRepo tankRepo;
     private final HospitalSupportRepo hospitalSupportRepo;
     private final YellowWaterCaseRepo yellowWaterCaseRepo;
+    private final RoadRestorationRepo roadRestorationRepo;
+    private final SubsidenceReportRepo subsidenceReportRepo;
     private final CurrentUser currentUser;
 
     public List<BurstEvent> list(EventStatus status) {
@@ -190,7 +192,11 @@ public class BurstService {
                         logRepo.findByOrderIdOrderByCreatedAtAsc(o.getId()),
                         checkRepo.findByOrderId(o.getId()).orElse(null),
                         issueRepo.findByOrderIdOrderByCreatedAtDesc(o.getId()),
-                        yellowWaterCaseRepo.findByOrderIdOrderByCreatedAtDesc(o.getId())))
+                        yellowWaterCaseRepo.findByOrderIdOrderByCreatedAtDesc(o.getId()),
+                        roadRestorationRepo.findByOrderId(o.getId()).orElse(null),
+                        roadRestorationRepo.findByOrderId(o.getId())
+                                .map(r -> subsidenceReportRepo.findByRoadRestorationId(r.getId()))
+                                .orElse(List.of())))
                 .toList();
         return new EventDetail(
                 e,
@@ -218,6 +224,15 @@ public class BurstService {
                 .count();
         if (openIssues > 0) {
             throw new ResponseStatusException(BAD_REQUEST, "仍有 " + openIssues + " 条复供后问题未解决，不能关闭事件");
+        }
+        // 道路恢复验收门禁：抢修单不能只按管道修复关闭，验收必须通过
+        for (RepairOrder o : orders) {
+            RoadRestoration road = roadRestorationRepo.findByOrderId(o.getId()).orElse(null);
+            if (road != null && road.getStatus() != RoadStatus.ACCEPTED) {
+                throw new ResponseStatusException(BAD_REQUEST,
+                        "工单 " + o.getOrderNo() + " 道路恢复验收未通过（当前: " + road.getStatus().getLabel()
+                                + "），不能关闭事件");
+            }
         }
         e.setStatus(EventStatus.CLOSED);
         e.setClosedAt(LocalDateTime.now());

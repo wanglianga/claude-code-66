@@ -65,6 +65,9 @@ public class BaseDataController {
         m.put("ywStatus", labels(YwStatus.values()));
         m.put("responsibility", labels(Responsibility.values()));
         m.put("watchStatus", labels(WatchStatus.values()));
+        m.put("roadStatus", labels(RoadStatus.values()));
+        m.put("confirmerRole", labels(ConfirmerRole.values()));
+        m.put("subsidenceStatus", labels(SubsidenceStatus.values()));
         m.put("facilityType", labels(FacilityType.values()));
         return m;
     }

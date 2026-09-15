@@ -6,6 +6,7 @@ import com.citywater.burst.dto.Requests.IssueStatusReq;
 import com.citywater.burst.model.*;
 import com.citywater.burst.repo.PostRestoreIssueRepo;
 import com.citywater.burst.repo.RepairOrderRepo;
+import com.citywater.burst.repo.RoadRestorationRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,8 @@ public class IssueService {
 
     private final PostRestoreIssueRepo issueRepo;
     private final RepairOrderRepo orderRepo;
+    private final RoadRestorationRepo roadRestorationRepo;
+    private final RoadService roadService;
     private final CurrentUser currentUser;
 
     public List<PostRestoreIssue> list(Long orderId) {
@@ -50,7 +53,17 @@ public class IssueService {
         i.setContactName(req.contactName());
         i.setContactPhone(req.contactPhone());
         i.setStatus(IssueStatus.OPEN);
-        return issueRepo.save(i);
+        PostRestoreIssue saved = issueRepo.save(i);
+
+        // 道路沉降类投诉：自动关联到道路恢复记录（沉降复查安排固定日期）
+        if (req.type() == IssueType.ROAD_SUBSIDENCE) {
+            roadRestorationRepo.findByOrderId(o.getId()).ifPresent(road ->
+                    roadService.addSubsidence(road.getId(),
+                            "投诉自动关联：" + req.description(),
+                            LocalDateTime.now().plusDays(7).toLocalDate(),
+                            saved));
+        }
+        return saved;
     }
 
     @Transactional

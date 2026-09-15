@@ -9,6 +9,7 @@ import com.citywater.burst.service.IssueService;
 import com.citywater.burst.service.RepairService;
 import com.citywater.burst.service.SupportService;
 import com.citywater.burst.service.YellowWaterService;
+import com.citywater.burst.service.RoadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -45,6 +46,8 @@ public class DataSeeder implements ApplicationRunner {
     private final SupportService supportService;
     private final HospitalSupportService hospitalSupportService;
     private final YellowWaterService yellowWaterService;
+    private final RoadService roadService;
+    private final RoadRestorationRepo roadRestorationRepo;
 
     @Value("${app.seed-demo-data:true}")
     private boolean seedDemoData;
@@ -197,6 +200,16 @@ public class DataSeeder implements ApplicationRunner {
                 o3.getId(), ComplaintType.ODOR, "老街社区", "6栋", 18,
                 "吴女士", "13866660006", "自来水有异味，疑似二次供水水箱污染",
                 "6栋1202厨房水龙头", "https://img.example.com/yw/6-1202-1.jpg", null));
+
+        // 道路恢复验收（E3 工单进入道路恢复阶段时自动建单）：已提交材料待确认
+        RoadRestoration road3 = roadRestorationRepo.findByOrderId(o3.getId()).orElseThrow();
+        roadService.submit(road3.getId(), new RoadSubmitReq(
+                true, true, true,
+                "https://img.example.com/road/e3-1.jpg,https://img.example.com/road/e3-2.jpg",
+                "抢修二队-道路班组", "沥青批次AC-2026-0912"));
+        // 周边居民沉降投诉：自动关联到道路恢复记录（复查安排固定日期）
+        issueService.create(new IssueCreateReq(o3.getId(), IssueType.ROAD_SUBSIDENCE,
+                "老街中段路口路面轻微沉降，车辆经过颠簸", "居民-郑先生", "13877770007"));
     }
 
     private ValveZone zone(String code, String name, String desc) {

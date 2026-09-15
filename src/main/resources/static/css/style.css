@@ -85,6 +85,10 @@ tr:hover td { background: #f8fbff; }
 .badge.WATER_COMPANY { background: #dbeafe; color: #1d4ed8; }
 .badge.PROPERTY { background: #ffedd5; color: #c2410c; }
 .badge.UNDETERMINED { background: #e5e7eb; color: #4b5563; }
+.badge.SUBMITTED { background: #dbeafe; color: #1d4ed8; }
+.badge.ACCEPTED { background: #d1fae5; color: #047857; }
+.badge.REJECTED { background: #fee2e2; color: #b91c1c; }
+.badge.RECHECKED { background: #d1fae5; color: #047857; }
 
 /* ---------- 按钮 ---------- */
 .btn { display: inline-block; border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; text-decoration: none; }

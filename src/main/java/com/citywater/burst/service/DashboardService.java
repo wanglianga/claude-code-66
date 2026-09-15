@@ -28,6 +28,8 @@ public class DashboardService {
     private final HospitalSupportRepo hospitalSupportRepo;
     private final YellowWaterCaseRepo yellowWaterCaseRepo;
     private final WaterQualityWatchRepo watchRepo;
+    private final RoadRestorationRepo roadRestorationRepo;
+    private final SubsidenceReportRepo subsidenceReportRepo;
 
     private static final List<EventStatus> ACTIVE = List.of(
             EventStatus.REPORTED, EventStatus.ASSESSED, EventStatus.DISPATCHED,
@@ -81,6 +83,10 @@ public class DashboardService {
         m.put("watchCommunities", watchRepo.countByStatus(WatchStatus.WATCHING));
         m.put("watchList", watchRepo.findAllByOrderByUpdatedAtDesc().stream()
                 .filter(w -> w.getStatus() == WatchStatus.WATCHING).toList());
+
+        // 道路恢复验收与沉降复查
+        m.put("roadAcceptancePending", roadRestorationRepo.countByStatusNot(RoadStatus.ACCEPTED));
+        m.put("subsidenceOpen", subsidenceReportRepo.countByStatus(SubsidenceStatus.OPEN));
         return m;
     }
 }
